@@ -1,0 +1,52 @@
+name: Build tool dates
+
+# Run on every push to main. Rebuilds the tool meta regions + the index list
+# from git history, and — only if that rebuild actually changes anything —
+# commits the result back and pushes. If nothing changed, the job is a no-op.
+#
+# Loop safety:
+#   - Commits pushed with the default GITHUB_TOKEN do NOT trigger new workflow
+#     runs (GitHub's built-in protection against accidental CI loops).
+#   - The bot's commit message includes [skip ci] as defense in depth.
+#   - The `if:` guard below also skips runs where the actor is the bot.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-tools-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history so git log --diff-filter=A works)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Rebuild tool dates
+        run: node scripts/build-tools.mjs
+
+      - name: Commit and push if changed
+        run: |
+          if git diff --quiet; then
+            echo "No rebuild changes; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u
+          git commit -m "build: refresh tool dates [skip ci]"
+          git push
