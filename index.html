@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tools</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111418;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --border-strong: #cbd5e1;
+    --panel: #f8fafc;
+    --panel-hover: #eff6ff;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eaed;
+      --muted: #9aa0a6;
+      --border: #262a30;
+      --border-strong: #3a3f47;
+      --panel: #14171c;
+      --panel-hover: #17253f;
+      --accent: #60a5fa;
+      --accent-hover: #93c5fd;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 2rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 640px; }
+
+  h1 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  p.lead {
+    color: var(--muted);
+    margin: 0 0 1.75rem;
+    font-size: 0.95rem;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  .search {
+    position: relative;
+    margin: 0 0 0.5rem;
+  }
+  .search svg {
+    position: absolute;
+    top: 50%;
+    left: 0.9rem;
+    transform: translateY(-50%);
+    width: 1rem;
+    height: 1rem;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  .search input {
+    width: 100%;
+    font: inherit;
+    font-size: 0.95rem;
+    color: var(--fg);
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 0.65rem 2.2rem 0.65rem 2.4rem;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .search input::placeholder { color: var(--muted); }
+  .search input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+    background: var(--bg);
+  }
+  /* Hide the native clear button; Esc clears instead */
+  .search input::-webkit-search-cancel-button { display: none; }
+  .search kbd {
+    position: absolute;
+    top: 50%;
+    right: 0.75rem;
+    transform: translateY(-50%);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+    pointer-events: none;
+  }
+  .search input:focus + kbd,
+  .search input:not(:placeholder-shown) + kbd { display: none; }
+
+  ul.tools {
+    list-style: none;
+    padding: 0;
+    margin: 1.25rem 0 0;
+  }
+  ul.tools > li {
+    padding: 1.15rem 0;
+    border-top: 1px solid var(--border);
+  }
+  ul.tools > li:last-child {
+    border-bottom: 1px solid var(--border);
+  }
+  ul.tools > li[hidden] { display: none; }
+  ul.tools h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0 0 0.3rem;
+    letter-spacing: -0.01em;
+  }
+  ul.tools h2 a { color: var(--fg); }
+  ul.tools h2 a:hover { color: var(--accent); text-decoration: none; }
+  ul.tools p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .empty {
+    padding: 1.15rem 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-top: 1.25rem;
+  }
+  .empty[hidden] { display: none; }
+
+  footer {
+    margin-top: 3rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>tools</h1>
+  <p class="lead">Small single-file web tools. Everything runs in your browser &mdash; no uploads, no servers.</p>
+
+  <div class="search" role="search">
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="13.35" y1="13.35" x2="17" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <input type="search" id="search" placeholder="Search tools&hellip;" autocomplete="off" aria-label="Search tools">
+    <kbd aria-hidden="true">/</kbd>
+  </div>
+
+  <ul class="tools" id="tools">
+    <li>
+      <h2><a href="pdf-unlock.html">PDF Permissions Unlocker</a></h2>
+      <p>Remove print, copy, and edit restrictions from permission-locked PDFs. Uses an in-browser build of MuPDF.</p>
+    </li>
+  </ul>
+
+  <p class="empty" id="empty" hidden>No tools match &ldquo;<span id="emptyQuery"></span>&rdquo;.</p>
+
+  <footer><a href="https://github.com/huangziwei/tools">source on github</a></footer>
+</main>
+
+<script>
+  (() => {
+    const input = document.getElementById('search');
+    const empty = document.getElementById('empty');
+    const emptyQuery = document.getElementById('emptyQuery');
+    const items = Array.from(document.querySelectorAll('#tools > li')).map((el) => ({
+      el,
+      text: el.textContent.toLowerCase().replace(/\s+/g, ' '),
+    }));
+
+    function filter() {
+      const query = input.value.trim().toLowerCase();
+      const terms = query.split(/\s+/).filter(Boolean);
+      let visible = 0;
+      for (const { el, text } of items) {
+        const match = terms.every((t) => text.includes(t));
+        el.hidden = !match;
+        if (match) visible++;
+      }
+      if (query && visible === 0) {
+        emptyQuery.textContent = query;
+        empty.hidden = false;
+      } else {
+        empty.hidden = true;
+      }
+    }
+
+    input.addEventListener('input', filter);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        input.value = '';
+        filter();
+        input.blur();
+      }
+    });
+
+    // "/" from anywhere focuses the search
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== '/' || e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target;
+      const tag = t && t.tagName && t.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) return;
+      e.preventDefault();
+      input.focus();
+      input.select();
+    });
+  })();
+</script>
+</body>
+</html>
