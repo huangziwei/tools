@@ -13,6 +13,13 @@ name: Build tool dates
 on:
   push:
     branches: [main]
+    # Only run when something that can actually change the generated output
+    # is touched. CLAUDE.md / LICENSE / README / docs changes don't need to
+    # trigger a rebuild + bot commit.
+    paths:
+      - '**.html'
+      - 'scripts/build-tools.mjs'
+      - '.github/workflows/build-tools.yml'
 
 concurrency:
   group: build-tools-${{ github.ref }}

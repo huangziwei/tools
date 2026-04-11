@@ -54,7 +54,12 @@ function gitCreated(file) {
 }
 
 function gitUpdated(file) {
-  return git(`git log -1 --format=%aI -- "${file}"`) || null;
+  // Exclude this script's own "build: refresh tool dates [skip ci]" bot
+  // commits. Otherwise the script reads its previous self's commit as the
+  // "last modified" date and chases its own tail on every CI run.
+  return git(
+    `git log -1 --format=%aI --fixed-strings --invert-grep --grep='[skip ci]' -- "${file}"`
+  ) || null;
 }
 
 // --- HTML extraction ----------------------------------------------------
@@ -201,15 +206,16 @@ async function main() {
     .join('\n');
 
   const indexHtml = await readFile(INDEX, 'utf8');
+  if (!indexHtml.includes('<!-- TOOLS_LIST_START -->') ||
+      !indexHtml.includes('<!-- TOOLS_LIST_END -->')) {
+    throw new Error('index.html is missing <!-- TOOLS_LIST_START/END --> markers');
+  }
   const patchedIndex = replaceMarker(
     indexHtml,
     '<!-- TOOLS_LIST_START -->',
     '<!-- TOOLS_LIST_END -->',
     `\n${listHtml}\n    `
   );
-  if (patchedIndex === indexHtml) {
-    throw new Error('index.html is missing <!-- TOOLS_LIST_START/END --> markers');
-  }
   if (patchedIndex !== indexHtml) {
     await writeFile(INDEX, patchedIndex);
     console.log(`patched index.html`);
