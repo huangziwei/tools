@@ -514,6 +514,29 @@
         continue;
       }
 
+      // Block-level 罫囲み start/end
+      if (/［＃ここから(罫囲み|枠囲み)］/.test(raw)) {
+        html += '<div class="keigakomi">\n';
+        raw = raw.replace(/［＃ここから(罫囲み|枠囲み)］/, '');
+        if (!raw.trim()) continue;
+      }
+      if (/［＃ここから破線(罫囲み|枠囲み)］/.test(raw)) {
+        html += '<div class="keigakomi-dashed">\n';
+        raw = raw.replace(/［＃ここから破線(罫囲み|枠囲み)］/, '');
+        if (!raw.trim()) continue;
+      }
+      if (/［＃ここから二重(罫囲み|枠囲み)］/.test(raw)) {
+        html += '<div class="keigakomi-double">\n';
+        raw = raw.replace(/［＃ここから二重(罫囲み|枠囲み)］/, '');
+        if (!raw.trim()) continue;
+      }
+      if (/［＃ここで(罫囲み|枠囲み|破線罫囲み|破線枠囲み|二重罫囲み|二重枠囲み)終わり］/.test(raw)) {
+        raw = raw.replace(/［＃ここで[^］]*囲み終わり］/, '');
+        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
+        html += '</div>\n';
+        continue;
+      }
+
       // Page/section breaks: ［＃改ページ］ ［＃改丁］ ［＃ページの左右中央］
       if (/［＃(改ページ|改丁|ページの左右中央)］/.test(raw)) {
         indentLevel = 0;
@@ -593,15 +616,25 @@
 
     // --- Block-form annotations (paired start/end) ---
 
-    // Bouten: ［＃傍点］text［＃傍点終わり］
-    s = s.replace(/［＃傍点］([^［]*)［＃傍点終わり］/g, function(_, text) {
-      return '<em class="sesame">' + text + '</em>';
-    });
+    // Bouten variants: ［＃傍点］text［＃傍点終わり］
+    s = s.replace(/［＃傍点］([^［]*)［＃傍点終わり］/g, function(_, t) { return '<em class="sesame">' + t + '</em>'; });
+    s = s.replace(/［＃白ゴマ傍点］([^［]*)［＃白ゴマ傍点終わり］/g, function(_, t) { return '<em class="open-sesame">' + t + '</em>'; });
+    s = s.replace(/［＃丸傍点］([^［]*)［＃丸傍点終わり］/g, function(_, t) { return '<em class="circle">' + t + '</em>'; });
+    s = s.replace(/［＃白丸傍点］([^［]*)［＃白丸傍点終わり］/g, function(_, t) { return '<em class="open-circle">' + t + '</em>'; });
+    s = s.replace(/［＃黒三角傍点］([^［]*)［＃黒三角傍点終わり］/g, function(_, t) { return '<em class="triangle">' + t + '</em>'; });
+    s = s.replace(/［＃白三角傍点］([^［]*)［＃白三角傍点終わり］/g, function(_, t) { return '<em class="open-triangle">' + t + '</em>'; });
+    s = s.replace(/［＃二重丸傍点］([^［]*)［＃二重丸傍点終わり］/g, function(_, t) { return '<em class="double-circle">' + t + '</em>'; });
+    s = s.replace(/［＃蛇の目傍点］([^［]*)［＃蛇の目傍点終わり］/g, function(_, t) { return '<em class="double-circle">' + t + '</em>'; });
+    s = s.replace(/［＃(ばつ|×)傍点］([^［]*)［＃(ばつ|×)傍点終わり］/g, function(_, _2, t) { return '<em class="batsu">' + t + '</em>'; });
 
-    // Underline: ［＃傍線］text［＃傍線終わり］
-    s = s.replace(/［＃傍線］([^［]*)［＃傍線終わり］/g, function(_, text) {
-      return '<span class="underline">' + text + '</span>';
-    });
+    // Underline variants: ［＃傍線］text［＃傍線終わり］
+    s = s.replace(/［＃傍線］([^［]*)［＃傍線終わり］/g, function(_, t) { return '<span class="underline">' + t + '</span>'; });
+    s = s.replace(/［＃二重傍線］([^［]*)［＃二重傍線終わり］/g, function(_, t) { return '<span class="underline-double">' + t + '</span>'; });
+    s = s.replace(/［＃波線］([^［]*)［＃波線終わり］/g, function(_, t) { return '<span class="underline-wavy">' + t + '</span>'; });
+    s = s.replace(/［＃破線］([^［]*)［＃破線終わり］/g, function(_, t) { return '<span class="underline-dashed">' + t + '</span>'; });
+    s = s.replace(/［＃鎖線］([^［]*)［＃鎖線終わり］/g, function(_, t) { return '<span class="underline-dotted">' + t + '</span>'; });
+    s = s.replace(/［＃取消線］([^［]*)［＃取消線終わり］/g, function(_, t) { return '<span class="strikethrough">' + t + '</span>'; });
+    s = s.replace(/［＃二重取消線］([^［]*)［＃二重取消線終わり］/g, function(_, t) { return '<span class="strikethrough-double">' + t + '</span>'; });
 
     // Bold: ［＃太字］text［＃太字終わり］
     s = s.replace(/［＃太字］([^［]*)［＃太字終わり］/g, function(_, text) {
@@ -622,6 +655,20 @@
     s = s.replace(/［＃横組み］([^［]*)［＃横組み終わり］/g, function(_, text) {
       return '<span class="yokogumi">' + text + '</span>';
     });
+
+    // Borders: ［＃罫囲み］text［＃罫囲み終わり］
+    s = s.replace(/［＃(罫囲み|枠囲み)］([^［]*)［＃(罫囲み|枠囲み)終わり］/g, function(_, _2, t) { return '<span class="keigakomi">' + t + '</span>'; });
+    s = s.replace(/［＃破線(罫囲み|枠囲み)］([^［]*)［＃破線(罫囲み|枠囲み)終わり］/g, function(_, _2, t) { return '<span class="keigakomi-dashed">' + t + '</span>'; });
+    s = s.replace(/［＃二重(罫囲み|枠囲み)］([^［]*)［＃二重(罫囲み|枠囲み)終わり］/g, function(_, _2, t) { return '<span class="keigakomi-double">' + t + '</span>'; });
+
+    // Superscript / subscript
+    s = s.replace(/［＃上付き小文字］([^［]*)［＃上付き小文字終わり］/g, function(_, t) { return '<sup>' + t + '</sup>'; });
+    s = s.replace(/［＃下付き小文字］([^［]*)［＃下付き小文字終わり］/g, function(_, t) { return '<sub>' + t + '</sub>'; });
+    s = s.replace(/［＃行右小書き］([^［]*)［＃行右小書き終わり］/g, function(_, t) { return '<sup>' + t + '</sup>'; });
+    s = s.replace(/［＃行左小書き］([^［]*)［＃行左小書き終わり］/g, function(_, t) { return '<sub>' + t + '</sub>'; });
+
+    // 返り点 (kanbun reading marks) — render as small superscript
+    s = s.replace(/［＃(返り点)］([^［]*)［＃\1終わり］/g, function(_, _2, t) { return '<sup class="kaeriten">' + t + '</sup>'; });
 
     // Font size: ［＃N段階大きな文字］text［＃大きな文字終わり］
     s = s.replace(/［＃([０-９0-9]+)段階大きな文字］([^［]*)［＃大きな文字終わり］/g, function(_, n, text) {
@@ -647,6 +694,22 @@
       postfixTargets.push({ text: text, tag: 'span class="underline"', close: 'span' });
       return '';
     });
+    s = s.replace(/［＃「([^」]+)」に二重傍線］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'span class="underline-double"', close: 'span' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」に波線］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'span class="underline-wavy"', close: 'span' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」に破線］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'span class="underline-dashed"', close: 'span' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」に鎖線］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'span class="underline-dotted"', close: 'span' });
+      return '';
+    });
     s = s.replace(/［＃「([^」]+)」は太字］/g, function(_, text) {
       postfixTargets.push({ text: text, tag: 'strong', close: 'strong' });
       return '';
@@ -657,6 +720,18 @@
     });
     s = s.replace(/［＃「([^」]+)」は斜体］/g, function(_, text) {
       postfixTargets.push({ text: text, tag: 'i', close: 'i' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」は(罫囲み|枠囲み)］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'span class="keigakomi"', close: 'span' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」は行右小書き］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'sup', close: 'sup' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」は行左小書き］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'sub', close: 'sub' });
       return '';
     });
     // Apply postfix targets — wrap last occurrence of each text
@@ -914,9 +989,25 @@
       'p.indent { margin-inline-start: 1em; text-indent: 0; }\n' +
       'img { max-width: 100%; max-height: 100%; }\n' +
       '.underline { text-decoration: underline; }\n' +
+      '.underline-double { text-decoration: underline double; }\n' +
+      '.underline-wavy { text-decoration: underline wavy; }\n' +
+      '.underline-dashed { text-decoration: underline dashed; }\n' +
+      '.underline-dotted { text-decoration: underline dotted; }\n' +
+      '.strikethrough { text-decoration: line-through; }\n' +
+      '.strikethrough-double { text-decoration: line-through double; }\n' +
+      'em.open-sesame { font-style: normal; -webkit-text-emphasis: open sesame; text-emphasis: open sesame; }\n' +
+      'em.circle { font-style: normal; -webkit-text-emphasis: filled circle; text-emphasis: filled circle; }\n' +
+      'em.open-circle { font-style: normal; -webkit-text-emphasis: open circle; text-emphasis: open circle; }\n' +
+      'em.triangle { font-style: normal; -webkit-text-emphasis: filled triangle; text-emphasis: filled triangle; }\n' +
+      'em.open-triangle { font-style: normal; -webkit-text-emphasis: open triangle; text-emphasis: open triangle; }\n' +
+      'em.double-circle { font-style: normal; -webkit-text-emphasis: filled double-circle; text-emphasis: filled double-circle; }\n' +
+      'em.batsu { font-style: normal; -webkit-text-emphasis: "×"; text-emphasis: "×"; }\n' +
       '.gothic { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif; }\n' +
       '.italic { font-style: italic; }\n' +
       '.yokogumi { writing-mode: horizontal-tb; -webkit-writing-mode: horizontal-tb; -epub-writing-mode: horizontal-tb; }\n' +
+      '.keigakomi { border: 1px solid currentColor; padding: 0.2em; }\n' +
+      '.keigakomi-dashed { border: 1px dashed currentColor; padding: 0.2em; }\n' +
+      '.keigakomi-double { border: 3px double currentColor; padding: 0.2em; }\n' +
       '.colophon { margin-top: 3em; font-size: 0.85em; }\n' +
       '.colophon p { text-indent: 0; margin: 0.2em 0; }\n';
     zip.file('OEBPS/style.css', css);
