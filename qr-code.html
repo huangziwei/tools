@@ -207,6 +207,48 @@
   }
   .btn-secondary:hover { border-color: var(--accent); }
 
+  .color-section { margin-top: 1.5rem; }
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .color-row-label {
+    font-size: 0.82rem;
+    font-weight: 500;
+    width: 3.2rem;
+    flex-shrink: 0;
+  }
+  input[type="color"] {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 2px;
+    cursor: pointer;
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  .swatches {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+  .swatch {
+    width: 28px;
+    height: 28px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+    padding: 0;
+  }
+  .swatch:hover {
+    border-color: var(--fg);
+    transform: scale(1.12);
+  }
+
   footer {
     margin-top: 2.5rem;
     color: var(--muted);
@@ -233,6 +275,20 @@
   </div>
   <div class="row" style="margin-top:0.5rem">
     <button class="btn-secondary" id="removeLogo" style="display:none">Remove logo</button>
+  </div>
+
+  <div class="color-section">
+    <label class="field-label">QR colors</label>
+    <div class="color-row">
+      <span class="color-row-label">Dots</span>
+      <input type="color" id="dotColorInput" value="#000000">
+      <div class="swatches" id="dotSwatches"></div>
+    </div>
+    <div class="color-row">
+      <span class="color-row-label">Eyes</span>
+      <input type="color" id="eyeColorInput" value="#000000">
+      <div class="swatches" id="eyeSwatches"></div>
+    </div>
   </div>
 
   <div class="section">
@@ -269,6 +325,10 @@
   const logoHint = document.getElementById('logoHint');
   const logoInput = document.getElementById('logoInput');
   const removeLogo = document.getElementById('removeLogo');
+  const dotColorInput = document.getElementById('dotColorInput');
+  const eyeColorInput = document.getElementById('eyeColorInput');
+  const dotSwatches = document.getElementById('dotSwatches');
+  const eyeSwatches = document.getElementById('eyeSwatches');
   const frameToggle = document.getElementById('frameToggle');
   const frameOptions = document.getElementById('frameOptions');
   const framePresets = document.getElementById('framePresets');
@@ -276,13 +336,16 @@
   const downloadBtn = document.getElementById('downloadBtn');
 
   let logoImg = null;
-  let logoColor = null;
+  let dotColor = '#000000';
+  let eyeColor = '#000000';
+  let palette = [];
   let currentFrame = 'card';
   let debounceTimer = null;
 
   // --- Color extraction ---
 
-  function extractDominantColor(img) {
+  function extractPalette(img, maxColors) {
+    maxColors = maxColors || 4;
     const size = 64;
     const c = document.createElement('canvas');
     c.width = size;
@@ -291,19 +354,14 @@
     ctx.drawImage(img, 0, 0, size, size);
     const data = ctx.getImageData(0, 0, size, size).data;
 
-    // Bucket pixels by hue, pick most frequent saturated color
-    let rSum = 0, gSum = 0, bSum = 0, count = 0;
     const buckets = new Map();
-
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
       if (a < 128) continue;
       const max = Math.max(r, g, b), min = Math.min(r, g, b);
       const l = (max + min) / 2;
       const sat = max === min ? 0 : (max - min) / (l > 127 ? (510 - max - min) : (max + min));
-      // Skip near-white, near-black, low-saturation
       if (l > 240 || l < 15 || sat < 0.15) continue;
-      // Quantize to 12-bit color
       const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
       const entry = buckets.get(key);
       if (entry) {
@@ -311,32 +369,31 @@
       } else {
         buckets.set(key, { r, g, b, n: 1 });
       }
-      rSum += r; gSum += g; bSum += b; count++;
     }
 
-    // Find largest bucket
-    let best = null, bestN = 0;
-    for (const entry of buckets.values()) {
-      if (entry.n > bestN) { best = entry; bestN = entry.n; }
+    const sorted = [...buckets.values()]
+      .filter(e => e.n >= 5)
+      .sort((a, b) => b.n - a.n);
+
+    const result = [];
+    for (const entry of sorted) {
+      if (result.length >= maxColors) break;
+      const r = Math.round(entry.r / entry.n);
+      const g = Math.round(entry.g / entry.n);
+      const b = Math.round(entry.b / entry.n);
+      let distinct = true;
+      for (const ex of result) {
+        const dr = r - ex.r, dg = g - ex.g, db = b - ex.b;
+        if (Math.sqrt(dr * dr + dg * dg + db * db) < 80) { distinct = false; break; }
+      }
+      if (!distinct) continue;
+      result.push({ r, g, b });
     }
 
-    if (!best || bestN < 10) {
-      // Fallback: average of all non-trivial pixels
-      if (count < 10) return null;
-      const ar = Math.round(rSum / count);
-      const ag = Math.round(gSum / count);
-      const ab = Math.round(bSum / count);
-      return ensureContrast(ar, ag, ab);
-    }
-
-    const ar = Math.round(best.r / best.n);
-    const ag = Math.round(best.g / best.n);
-    const ab = Math.round(best.b / best.n);
-    return ensureContrast(ar, ag, ab);
+    return result.map(c => ensureContrast(c.r, c.g, c.b));
   }
 
   function ensureContrast(r, g, b) {
-    // Darken if too light against white (WCAG luminance ratio >= 3:1)
     const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     if (lum > 0.55) {
       const factor = 0.55 / lum;
@@ -344,7 +401,21 @@
       g = Math.round(g * factor);
       b = Math.round(b * factor);
     }
-    return `rgb(${r},${g},${b})`;
+    return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+
+  function renderPalette() {
+    [dotSwatches, eyeSwatches].forEach(container => {
+      container.innerHTML = '';
+      palette.forEach(hex => {
+        const btn = document.createElement('button');
+        btn.className = 'swatch';
+        btn.style.background = hex;
+        btn.dataset.color = hex;
+        btn.title = hex;
+        container.appendChild(btn);
+      });
+    });
   }
 
   // --- Utility ---
@@ -493,7 +564,6 @@
     ctx.fillRect(qrOffX, qrOffY, qrTotalSize, qrTotalSize);
 
     // --- Draw QR modules ---
-    const qrColor = logoColor || '#000000';
     const gap = moduleSize * 0.12;
     const dotSize = moduleSize - gap;
     const dotR = dotSize * 0.28;
@@ -512,7 +582,7 @@
             col >= logoZoneStart && col < logoZoneEnd) continue;
         if (!qr.isDark(row, col)) continue;
 
-        ctx.fillStyle = qrColor;
+        ctx.fillStyle = dotColor;
         const dx = mX + col * moduleSize + gap / 2;
         const dy = mY + row * moduleSize + gap / 2;
         roundedRect(ctx, dx, dy, dotSize, dotSize, dotR);
@@ -522,9 +592,9 @@
 
     // --- Draw finder patterns ---
     const fpSize = moduleSize * 7;
-    drawFinderPattern(ctx, mX, mY, fpSize, qrColor);
-    drawFinderPattern(ctx, mX + (moduleCount - 7) * moduleSize, mY, fpSize, qrColor);
-    drawFinderPattern(ctx, mX, mY + (moduleCount - 7) * moduleSize, fpSize, qrColor);
+    drawFinderPattern(ctx, mX, mY, fpSize, eyeColor);
+    drawFinderPattern(ctx, mX + (moduleCount - 7) * moduleSize, mY, fpSize, eyeColor);
+    drawFinderPattern(ctx, mX, mY + (moduleCount - 7) * moduleSize, fpSize, eyeColor);
 
     // --- Draw logo ---
     if (logoImg) {
@@ -566,7 +636,7 @@
     // --- Draw frame decorations ---
     if (useFrame && currentFrame === 'card' && labelText) {
       const fontSize = Math.round(qrTotalSize * 0.055);
-      ctx.fillStyle = qrColor;
+      ctx.fillStyle = dotColor;
       ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -582,7 +652,7 @@
       const x2 = canvasW - inset;
       const y2Limit = canvasH - (labelText ? labelH : 0) - inset;
 
-      ctx.strokeStyle = qrColor;
+      ctx.strokeStyle = dotColor;
       ctx.lineWidth = lw;
       ctx.lineCap = 'round';
 
@@ -613,7 +683,7 @@
 
       if (labelText) {
         const fontSize = Math.round(qrTotalSize * 0.05);
-        ctx.fillStyle = qrColor;
+        ctx.fillStyle = dotColor;
         ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -627,7 +697,7 @@
       const bannerR = 24;
 
       // Banner strip at bottom
-      ctx.fillStyle = qrColor;
+      ctx.fillStyle = dotColor;
       ctx.beginPath();
       ctx.moveTo(0, bannerY);
       ctx.lineTo(canvasW, bannerY);
@@ -666,7 +736,14 @@
       const img = new Image();
       img.onload = function() {
         logoImg = img;
-        logoColor = extractDominantColor(img);
+        palette = extractPalette(img);
+        renderPalette();
+        if (palette.length > 0) {
+          dotColor = palette[0];
+          dotColorInput.value = dotColor;
+          eyeColor = palette.length > 1 ? palette[1] : palette[0];
+          eyeColorInput.value = eyeColor;
+        }
         removeLogo.style.display = '';
         logoHint.style.display = 'none';
         render();
@@ -678,7 +755,12 @@
 
   function clearLogo() {
     logoImg = null;
-    logoColor = null;
+    palette = [];
+    dotColor = '#000000';
+    eyeColor = '#000000';
+    dotColorInput.value = '#000000';
+    eyeColorInput.value = '#000000';
+    renderPalette();
     removeLogo.style.display = 'none';
     logoInput.value = '';
     render();
@@ -693,6 +775,32 @@
   });
 
   removeLogo.addEventListener('click', clearLogo);
+
+  // Color inputs
+  dotColorInput.addEventListener('input', function() {
+    dotColor = dotColorInput.value;
+    render();
+  });
+  eyeColorInput.addEventListener('input', function() {
+    eyeColor = eyeColorInput.value;
+    render();
+  });
+
+  // Swatch clicks
+  dotSwatches.addEventListener('click', function(e) {
+    var btn = e.target.closest('.swatch');
+    if (!btn) return;
+    dotColor = btn.dataset.color;
+    dotColorInput.value = dotColor;
+    render();
+  });
+  eyeSwatches.addEventListener('click', function(e) {
+    var btn = e.target.closest('.swatch');
+    if (!btn) return;
+    eyeColor = btn.dataset.color;
+    eyeColorInput.value = eyeColor;
+    render();
+  });
 
   // Logo drag-and-drop onto preview area
   ['dragenter', 'dragover'].forEach(function(name) {
