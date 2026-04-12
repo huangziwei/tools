@@ -431,6 +431,7 @@
     if (/^https?:\/\//.test(val)) return true;
     if (/^\/\//.test(val)) return true;
     if (/^data:/.test(val)) return true;
+    if (/^(mailto:|tel:|magnet:\?)/.test(val)) return true;
     if (/\.[a-z0-9]{2,5}(\?|#|$)/i.test(val) && /\//.test(val)) return true;
     return false;
   }
