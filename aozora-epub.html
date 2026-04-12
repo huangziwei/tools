@@ -289,6 +289,8 @@
   var bookTitle = '';
   var bookAuthor = '';
   var bodyXhtml = '';   // inner XHTML of main content
+  var bookToc = [];     // [{id, level, text}]
+  var bookColophon = '';
   var images = [];      // [{name, data (Uint8Array), mime}]
 
   // --- Decoding ---
@@ -341,7 +343,7 @@
         bodyStart = j + 1;
       }
     }
-    // Find trailing bibliographical section
+    // Find trailing bibliographical section and extract colophon
     var bodyEnd = lines.length;
     for (var k = lines.length - 1; k > bodyStart; k--) {
       if (/^底本[：:]/.test(lines[k].trim())) {
@@ -349,53 +351,79 @@
         break;
       }
     }
+    // Parse colophon (底本 to end, before 青空文庫作成ファイル)
+    var colophonLines = [];
+    for (var c = bodyEnd; c < lines.length; c++) {
+      var cl = lines[c].trim();
+      if (/^(青空文庫作成ファイル|このファイルは)/.test(cl)) break;
+      if (cl) colophonLines.push(cl);
+    }
+    var colophon = colophonLines.join('\n');
 
     var bodyLines = lines.slice(bodyStart, bodyEnd);
     while (bodyLines.length && !bodyLines[0].trim()) bodyLines.shift();
     while (bodyLines.length && !bodyLines[bodyLines.length - 1].trim()) bodyLines.pop();
 
-    // Multi-line state
-    var inBlockquote = false;
+    // Multi-line state — use CSS class instead of <blockquote> to avoid nesting issues
+    var indentLevel = 0;
+    var headingId = 0;
+    var tocEntries = []; // [{id, level, text}]
     var html = '';
 
     for (var n = 0; n < bodyLines.length; n++) {
       var raw = bodyLines[n];
 
       // Block indent start/end
-      if (/［＃ここから[０-９0-9]+字下げ］/.test(raw)) {
-        html += '<blockquote>';
-        inBlockquote = true;
-        raw = raw.replace(/［＃ここから[０-９0-9]+字下げ］/, '');
+      var indentStart = raw.match(/［＃ここから[０-９0-9]+字下げ[^］]*］/);
+      if (indentStart) {
+        indentLevel++;
+        raw = raw.replace(/［＃ここから[０-９0-9]+字下げ[^］]*］/, '');
         if (!raw.trim()) continue;
       }
       if (/［＃ここで字下げ終わり］/.test(raw)) {
         raw = raw.replace(/［＃ここで字下げ終わり］/, '');
-        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
-        if (inBlockquote) { html += '</blockquote>'; inBlockquote = false; }
+        if (raw.trim()) {
+          html += '<p class="indent">' + convertAozoraLine(raw) + '</p>\n';
+        }
+        indentLevel = 0;
         continue;
       }
 
       // Page/section breaks: ［＃改ページ］ ［＃改丁］ ［＃ページの左右中央］
-      if (/^［＃(改ページ|改丁|ページの左右中央)］\s*$/.test(raw.trim())) continue;
-      // Inline page break within line
-      raw = raw.replace(/［＃(改ページ|改丁|ページの左右中央)］/g, '');
+      if (/［＃(改ページ|改丁|ページの左右中央)］/.test(raw)) {
+        indentLevel = 0;
+        if (/^［＃(改ページ|改丁|ページの左右中央)］\s*$/.test(raw.trim())) continue;
+        raw = raw.replace(/［＃(改ページ|改丁|ページの左右中央)］/g, '');
+      }
+
+      // Reset indent before headings
+      if (/［＃[大中小]見出し］/.test(raw)) indentLevel = 0;
 
       // Headings: ［＃大見出し］text［＃大見出し終わり］
       var headingMatch = raw.match(/［＃大見出し］(.+?)［＃大見出し終わり］/);
       if (headingMatch) {
+        headingId++;
         var hText = headingMatch[1].replace(/［＃[^］]*］/g, '');
-        html += '<h2>' + convertAozoraLine(hText) + '</h2>\n';
+        var hPlain = hText.replace(/《[^》]*》/g, '').replace(/｜/g, '');
+        tocEntries.push({ id: 'h' + headingId, level: 2, text: hPlain });
+        html += '<h2 id="h' + headingId + '">' + convertAozoraLine(hText) + '</h2>\n';
         continue;
       }
       headingMatch = raw.match(/［＃中見出し］(.+?)［＃中見出し終わり］/);
       if (headingMatch) {
+        headingId++;
         var hText = headingMatch[1].replace(/［＃「[^」]*」は底本では[^］]*］/g, '');
-        html += '<h3>' + convertAozoraLine(hText) + '</h3>\n';
+        var hPlain = hText.replace(/《[^》]*》/g, '').replace(/｜/g, '');
+        tocEntries.push({ id: 'h' + headingId, level: 3, text: hPlain });
+        html += '<h3 id="h' + headingId + '">' + convertAozoraLine(hText) + '</h3>\n';
         continue;
       }
       headingMatch = raw.match(/［＃小見出し］(.+?)［＃小見出し終わり］/);
       if (headingMatch) {
-        html += '<h4>' + convertAozoraLine(headingMatch[1]) + '</h4>\n';
+        headingId++;
+        var hPlain = headingMatch[1].replace(/《[^》]*》/g, '').replace(/｜/g, '');
+        tocEntries.push({ id: 'h' + headingId, level: 4, text: hPlain });
+        html += '<h4 id="h' + headingId + '">' + convertAozoraLine(headingMatch[1]) + '</h4>\n';
         continue;
       }
 
@@ -408,12 +436,11 @@
         continue;
       }
 
-      html += '<p>' + convertAozoraLine(raw) + '</p>\n';
+      var pClass = indentLevel > 0 ? ' class="indent"' : '';
+      html += '<p' + pClass + '>' + convertAozoraLine(raw) + '</p>\n';
     }
 
-    if (inBlockquote) html += '</blockquote>';
-
-    return { title: title, author: author, body: html };
+    return { title: title, author: author, body: html, toc: tocEntries, colophon: colophon };
   }
 
   function escapeXml(s) {
@@ -448,11 +475,21 @@
     s = s.replace(/［＃太字］([^［]*)［＃太字終わり］/g, function(_, text) {
       return '<strong>' + text + '</strong>';
     });
-    // Postfix bold: ［＃「text」は太字］
-    s = s.replace(/「([^」]+)」[\s\S]*?［＃「[^」]*」は太字］/g, function(m) {
-      var inner = m.match(/「([^」]+)」/);
-      return '<strong>' + (inner ? inner[1] : '') + '</strong>';
+    // Postfix bold: ［＃「text」は太字］— wraps the nearest preceding occurrence of text
+    var boldTargets = [];
+    s = s.replace(/［＃「([^」]+)」は太字］/g, function(_, text) {
+      boldTargets.push(text);
+      return '';
     });
+    for (var bi = 0; bi < boldTargets.length; bi++) {
+      var bt = boldTargets[bi];
+      var escaped = bt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Replace last occurrence not already wrapped
+      var idx = s.lastIndexOf(bt);
+      if (idx !== -1) {
+        s = s.substring(0, idx) + '<strong>' + bt + '</strong>' + s.substring(idx + bt.length);
+      }
+    }
 
     // Inline notes: ［＃割り注］text［＃割り注終わり］
     s = s.replace(/［＃割り注］([^［]*)［＃割り注終わり］/g, function(_, text) {
@@ -520,7 +557,31 @@
     // Map sesame_dot class to our class
     body = body.replace(/class="sesame_dot"/g, 'class="sesame"');
 
-    return { title: title, author: author, body: body };
+    // Extract colophon from bibliographical_information div
+    var bibDiv = doc.querySelector('.bibliographical_information');
+    var colophon = '';
+    if (bibDiv) {
+      colophon = bibDiv.textContent.trim();
+    }
+
+    // Extract TOC from headings (Aozora XHTML rarely has them, but handle if present)
+    var tocEntries = [];
+    var hId = 0;
+    // Headings in body won't exist in the simple XHTML format, but just in case
+    var tmp = document.createElement('div');
+    tmp.innerHTML = body;
+    tmp.querySelectorAll('h2, h3, h4').forEach(function(h) {
+      hId++;
+      var id = 'h' + hId;
+      var level = parseInt(h.tagName.charAt(1));
+      tocEntries.push({ id: id, level: level, text: h.textContent.trim() });
+      // Inject id into body string
+      var tag = h.outerHTML;
+      var tagged = tag.replace(/^<(h[234])/, '<$1 id="' + id + '"');
+      body = body.replace(tag, tagged);
+    });
+
+    return { title: title, author: author, body: body, toc: tocEntries, colophon: colophon };
   }
 
   // --- EPUB generation ---
@@ -532,7 +593,7 @@
     });
   }
 
-  function buildEpub(title, author, bodyXhtml, images) {
+  function buildEpub(title, author, bodyXhtml, images, toc, colophon) {
     var zip = new JSZip();
     var uuid = generateUUID();
 
@@ -565,13 +626,17 @@
       '  text-indent: 1em;\n' +
       '  margin: 0;\n' +
       '}\n' +
+      'h1, h2, h3, h4 { text-indent: 0; }\n' +
       'em.sesame {\n' +
       '  font-style: normal;\n' +
       '  -webkit-text-emphasis: filled sesame;\n' +
       '  text-emphasis: filled sesame;\n' +
       '}\n' +
       'rt { font-size: 0.55em; }\n' +
-      'img { max-width: 100%; max-height: 100%; }\n';
+      'p.indent { margin-inline-start: 1em; text-indent: 0; }\n' +
+      'img { max-width: 100%; max-height: 100%; }\n' +
+      '.colophon { margin-top: 3em; font-size: 0.85em; }\n' +
+      '.colophon p { text-indent: 0; margin: 0.2em 0; }\n';
     zip.file('OEBPS/style.css', css);
 
     // Content XHTML
@@ -586,10 +651,20 @@
       '</head>\n' +
       '<body>\n' +
       '<h1>' + escapeXml(title) + '</h1>\n' +
-      '<h2>' + escapeXml(author) + '</h2>\n' +
-      bodyXhtml + '\n' +
-      '</body>\n' +
-      '</html>';
+      '<p>' + escapeXml(author) + '</p>\n' +
+      bodyXhtml + '\n';
+
+    // Colophon section
+    if (colophon) {
+      contentXhtml += '<div class="colophon" id="colophon">\n';
+      var cLines = colophon.split('\n');
+      for (var ci = 0; ci < cLines.length; ci++) {
+        contentXhtml += '<p>' + escapeXml(cLines[ci]) + '</p>\n';
+      }
+      contentXhtml += '</div>\n';
+    }
+
+    contentXhtml += '</body>\n</html>';
     zip.file('OEBPS/text/content.xhtml', contentXhtml);
 
     // Images
@@ -600,34 +675,93 @@
       imageManifest += '    <item id="img' + i + '" href="images/' + escapeXml(img.name) + '" media-type="' + img.mime + '"/>\n';
     }
 
+    // Build TOC entries
+    // Nested: h2 = top level, h3/h4 = children of preceding h2
+    function buildNavOl(entries) {
+      if (!entries.length) return '<ol><li><a href="text/content.xhtml">' + escapeXml(title) + '</a></li>' +
+        (colophon ? '<li><a href="text/content.xhtml#colophon">底本情報</a></li>' : '') + '</ol>';
+      var ol = '<ol>\n';
+      ol += '<li><a href="text/content.xhtml">' + escapeXml(title) + '</a></li>\n';
+      var i = 0;
+      while (i < entries.length) {
+        var e = entries[i];
+        if (e.level === 2) {
+          ol += '<li><a href="text/content.xhtml#' + e.id + '">' + escapeXml(e.text) + '</a>';
+          // Collect children (h3, h4)
+          var children = [];
+          i++;
+          while (i < entries.length && entries[i].level > 2) {
+            children.push(entries[i]);
+            i++;
+          }
+          if (children.length) {
+            ol += '\n<ol>\n';
+            for (var c = 0; c < children.length; c++) {
+              ol += '<li><a href="text/content.xhtml#' + children[c].id + '">' + escapeXml(children[c].text) + '</a></li>\n';
+            }
+            ol += '</ol>\n';
+          }
+          ol += '</li>\n';
+        } else {
+          ol += '<li><a href="text/content.xhtml#' + e.id + '">' + escapeXml(e.text) + '</a></li>\n';
+          i++;
+        }
+      }
+      if (colophon) {
+        ol += '<li><a href="text/content.xhtml#colophon">底本情報</a></li>\n';
+      }
+      ol += '</ol>';
+      return ol;
+    }
+
     // TOC (nav)
     var navXhtml =
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<!DOCTYPE html>\n' +
       '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ja">\n' +
-      '<head><meta charset="UTF-8"/><title>Navigation</title></head>\n' +
+      '<head><meta charset="UTF-8"/><title>Navigation</title>\n' +
+      '<link rel="stylesheet" type="text/css" href="style.css"/>\n' +
+      '</head>\n' +
       '<body>\n' +
       '<nav epub:type="toc" id="toc">\n' +
-      '  <ol><li><a href="text/content.xhtml">' + escapeXml(title) + '</a></li></ol>\n' +
+      '  <h1>目次</h1>\n' +
+      '  ' + buildNavOl(toc) + '\n' +
       '</nav>\n' +
       '</body>\n' +
       '</html>';
     zip.file('OEBPS/toc.xhtml', navXhtml);
 
     // NCX (for EPUB 2 compat)
+    var ncxPoints = '';
+    ncxPoints += '  <navPoint id="np0" playOrder="0">\n' +
+      '    <navLabel><text>' + escapeXml(title) + '</text></navLabel>\n' +
+      '    <content src="text/content.xhtml"/>\n' +
+      '  </navPoint>\n';
+    for (var t = 0; t < toc.length; t++) {
+      ncxPoints += '  <navPoint id="np' + (t + 1) + '" playOrder="' + (t + 1) + '">\n' +
+        '    <navLabel><text>' + escapeXml(toc[t].text) + '</text></navLabel>\n' +
+        '    <content src="text/content.xhtml#' + toc[t].id + '"/>\n' +
+        '  </navPoint>\n';
+    }
+
     var ncx =
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">\n' +
       '<head><meta name="dtb:uid" content="urn:uuid:' + uuid + '"/></head>\n' +
       '<docTitle><text>' + escapeXml(title) + '</text></docTitle>\n' +
-      '<navMap>\n' +
-      '  <navPoint id="np1" playOrder="1">\n' +
-      '    <navLabel><text>' + escapeXml(title) + '</text></navLabel>\n' +
-      '    <content src="text/content.xhtml"/>\n' +
-      '  </navPoint>\n' +
-      '</navMap>\n' +
+      '<navMap>\n' + ncxPoints + '</navMap>\n' +
       '</ncx>';
     zip.file('OEBPS/toc.ncx', ncx);
+
+    // Parse source info from colophon for OPF metadata
+    var publisher = '';
+    var pubDate = '';
+    if (colophon) {
+      var pubMatch = colophon.match(/底本[：:]「[^」]*」([^、\n]+)/);
+      if (pubMatch) publisher = pubMatch[1].trim();
+      var dateMatch = colophon.match(/(\d{4})[（(].*?[）)]\s*年\s*(\d{1,2})\s*月/);
+      if (dateMatch) pubDate = dateMatch[1] + '-' + dateMatch[2].padStart(2, '0');
+    }
 
     // OPF
     var opf =
@@ -639,6 +773,9 @@
       '    <dc:title>' + escapeXml(title) + '</dc:title>\n' +
       '    <dc:creator>' + escapeXml(author) + '</dc:creator>\n' +
       '    <dc:language>ja</dc:language>\n' +
+      (publisher ? '    <dc:publisher>' + escapeXml(publisher) + '</dc:publisher>\n' : '') +
+      (pubDate ? '    <dc:date>' + pubDate + '</dc:date>\n' : '') +
+      '    <dc:source>https://www.aozora.gr.jp/</dc:source>\n' +
       '    <meta property="dcterms:modified">' + new Date().toISOString().replace(/\.\d+Z/, 'Z') + '</meta>\n' +
       '    <meta property="rendition:layout">reflowable</meta>\n' +
       '  </metadata>\n' +
@@ -733,6 +870,8 @@
     bookTitle = result.title;
     bookAuthor = result.author;
     bodyXhtml = result.body;
+    bookToc = result.toc || [];
+    bookColophon = result.colophon || '';
 
     titleInput.value = bookTitle;
     authorInput.value = bookAuthor;
@@ -756,6 +895,8 @@
     bookTitle = '';
     bookAuthor = '';
     bodyXhtml = '';
+    bookToc = [];
+    bookColophon = '';
     images = [];
     titleInput.value = '';
     authorInput.value = '';
@@ -835,7 +976,7 @@
     showStatus('Generating EPUB\u2026');
 
     try {
-      var epub = buildEpub(title, author, bodyXhtml, images);
+      var epub = buildEpub(title, author, bodyXhtml, images, bookToc, bookColophon);
       epub.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' }).then(function(blob) {
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
