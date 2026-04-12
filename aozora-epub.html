@@ -172,6 +172,46 @@
   .status.visible { display: block; }
   .status.error { color: #ef4444; }
 
+  .cover-section {
+    display: none;
+    margin-top: 1.5rem;
+  }
+  .cover-section.visible { display: block; }
+  .cover-row {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .cover-preview {
+    width: 150px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--panel);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .cover-preview:hover {
+    border-color: var(--accent);
+  }
+  .cover-preview.drag-over {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  .cover-preview img,
+  .cover-preview svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    pointer-events: none;
+  }
+  .cover-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
   .preview {
     display: none;
     margin-top: 1.5rem;
@@ -252,6 +292,17 @@
     <input type="text" id="authorInput" placeholder="Author name">
   </div>
 
+  <div class="cover-section" id="coverSection">
+    <label class="field-label">Cover</label>
+    <div class="cover-row">
+      <div class="cover-preview" id="coverPreview" title="Click or drop image to replace"></div>
+      <div class="cover-actions">
+        <button class="btn-secondary" id="resetCoverBtn" style="display:none">Reset</button>
+      </div>
+      <input type="file" id="coverFileInput" accept="image/*" style="display:none">
+    </div>
+  </div>
+
   <div class="action-row" id="actionRow">
     <button class="btn-primary" id="convertBtn">Download EPUB</button>
   </div>
@@ -284,6 +335,10 @@
   var preview = document.getElementById('preview');
   var previewBody = document.getElementById('previewBody');
   var toast = document.getElementById('toast');
+  var coverSection = document.getElementById('coverSection');
+  var coverPreview = document.getElementById('coverPreview');
+  var resetCoverBtn = document.getElementById('resetCoverBtn');
+  var coverFileInput = document.getElementById('coverFileInput');
 
   // Parsed state
   var bookTitle = '';
@@ -292,6 +347,7 @@
   var bookToc = [];     // [{id, level, text}]
   var bookColophon = '';
   var images = [];      // [{name, data (Uint8Array), mime}]
+  var customCover = null; // {data: Uint8Array, mime: string} or null for default SVG
 
   // --- Decoding ---
 
@@ -595,53 +651,98 @@
 
   function buildCoverSvg(title, author) {
     var w = 1050, h = 1500;
-    var pad = 60;      // outer padding
-    var bw = 2;        // border width
-    var gap = 16;      // gap between double border lines
+    var pad = 60;
+    var bw = 2;
+    var gap = 16;
     var bg = '#F2EBDA';
     var border = '#8B9E78';
     var fg = '#2C2418';
     var muted = '#6B6256';
+    var font = "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif";
+    var innerW = w - (pad + gap) * 2 - 60; // usable text width with margin
 
-    // Break title into lines if long (max ~8 chars per line for vertical feel)
-    var titleLines = [];
-    if (title.length <= 10) {
-      titleLines = [title];
-    } else if (title.length <= 20) {
-      var mid = Math.ceil(title.length / 2);
-      titleLines = [title.substring(0, mid), title.substring(mid)];
-    } else {
-      var third = Math.ceil(title.length / 3);
-      titleLines = [title.substring(0, third), title.substring(third, third * 2), title.substring(third * 2)];
+    // Estimate text width: ~1em per CJK char, ~0.55em per latin char
+    function estimateWidth(text, fontSize) {
+      var w = 0;
+      for (var i = 0; i < text.length; i++) {
+        w += text.charCodeAt(i) > 0x7F ? fontSize : fontSize * 0.55;
+      }
+      return w;
     }
 
-    var titleFontSize = title.length <= 8 ? 56 : title.length <= 14 ? 44 : 36;
-    var titleY = h * 0.38;
+    // Find largest font size that fits within innerW, splitting into lines as needed
+    var maxTitleFont = 100;
+    var minTitleFont = 36;
+    var titleFontSize, titleLines;
+
+    for (titleFontSize = maxTitleFont; titleFontSize >= minTitleFont; titleFontSize -= 4) {
+      // Try single line
+      if (estimateWidth(title, titleFontSize) <= innerW) {
+        titleLines = [title];
+        break;
+      }
+      // Try two lines — split at best break point
+      var best2 = splitLines(title, 2, titleFontSize);
+      if (best2.maxW <= innerW) {
+        titleLines = best2.lines;
+        break;
+      }
+      // Try three lines
+      var best3 = splitLines(title, 3, titleFontSize);
+      if (best3.maxW <= innerW) {
+        titleLines = best3.lines;
+        break;
+      }
+    }
+    if (!titleLines) {
+      titleFontSize = minTitleFont;
+      var best = splitLines(title, 3, titleFontSize);
+      titleLines = best.lines;
+    }
+
+    function splitLines(text, n, fs) {
+      var charsPerLine = Math.ceil(text.length / n);
+      var lines = [];
+      for (var i = 0; i < n; i++) {
+        var seg = text.substring(i * charsPerLine, (i + 1) * charsPerLine);
+        if (seg) lines.push(seg);
+      }
+      var maxW = 0;
+      for (var j = 0; j < lines.length; j++) {
+        var lw = estimateWidth(lines[j], fs);
+        if (lw > maxW) maxW = lw;
+      }
+      return { lines: lines, maxW: maxW };
+    }
+
     var titleSpacing = titleFontSize * 1.5;
+    var titleBlockH = titleLines.length * titleSpacing;
+    var titleY = h * 0.35 - titleBlockH / 2 + titleFontSize;
+
+    // Author font — scale with title but capped
+    var authorFontSize = Math.min(40, Math.max(26, Math.round(titleFontSize * 0.45)));
 
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">\n';
-    // Background
     svg += '<rect width="' + w + '" height="' + h + '" fill="' + bg + '"/>\n';
-    // Double border
     svg += '<rect x="' + pad + '" y="' + pad + '" width="' + (w - pad * 2) + '" height="' + (h - pad * 2) + '" fill="none" stroke="' + border + '" stroke-width="' + bw + '"/>\n';
     svg += '<rect x="' + (pad + gap) + '" y="' + (pad + gap) + '" width="' + (w - (pad + gap) * 2) + '" height="' + (h - (pad + gap) * 2) + '" fill="none" stroke="' + border + '" stroke-width="' + (bw * 0.5) + '"/>\n';
 
-    // Collection label top center
-    svg += '<text x="' + (w / 2) + '" y="' + (pad + gap + 48) + '" text-anchor="middle" font-family="\'Hiragino Mincho ProN\', \'Yu Mincho\', \'Noto Serif JP\', serif" font-size="22" letter-spacing="0.5em" fill="' + muted + '">青空文庫</text>\n';
+    // Collection label
+    svg += '<text x="' + (w / 2) + '" y="' + (pad + gap + 56) + '" text-anchor="middle" font-family="' + font + '" font-size="26" letter-spacing="0.5em" fill="' + muted + '">青空文庫</text>\n';
 
     // Title
     for (var ti = 0; ti < titleLines.length; ti++) {
       var ly = titleY + ti * titleSpacing;
-      svg += '<text x="' + (w / 2) + '" y="' + ly + '" text-anchor="middle" font-family="\'Hiragino Mincho ProN\', \'Yu Mincho\', \'Noto Serif JP\', serif" font-size="' + titleFontSize + '" fill="' + fg + '">' + escapeXml(titleLines[ti]) + '</text>\n';
+      svg += '<text x="' + (w / 2) + '" y="' + ly + '" text-anchor="middle" font-family="' + font + '" font-size="' + titleFontSize + '" fill="' + fg + '">' + escapeXml(titleLines[ti]) + '</text>\n';
     }
 
-    // Author below title
-    var authorY = titleY + titleLines.length * titleSpacing + 20;
-    svg += '<text x="' + (w / 2) + '" y="' + authorY + '" text-anchor="middle" font-family="\'Hiragino Mincho ProN\', \'Yu Mincho\', \'Noto Serif JP\', serif" font-size="26" fill="' + muted + '">' + escapeXml(author) + '</text>\n';
+    // Divider between title and author
+    var divY = titleY + titleLines.length * titleSpacing + 16;
+    svg += '<line x1="' + (w / 2 - 50) + '" y1="' + divY + '" x2="' + (w / 2 + 50) + '" y2="' + divY + '" stroke="' + border + '" stroke-width="1"/>\n';
 
-    // Small decorative divider — simple thin line
-    var divY = authorY + 40;
-    svg += '<line x1="' + (w / 2 - 40) + '" y1="' + divY + '" x2="' + (w / 2 + 40) + '" y2="' + divY + '" stroke="' + border + '" stroke-width="1"/>\n';
+    // Author
+    var authorY = divY + 40 + authorFontSize;
+    svg += '<text x="' + (w / 2) + '" y="' + authorY + '" text-anchor="middle" font-family="' + font + '" font-size="' + authorFontSize + '" fill="' + muted + '">' + escapeXml(author) + '</text>\n';
 
     svg += '</svg>';
     return svg;
@@ -694,8 +795,17 @@
     zip.file('OEBPS/style.css', css);
 
     // Cover
-    var coverSvg = buildCoverSvg(title, author);
-    zip.file('OEBPS/images/cover.svg', coverSvg);
+    var coverFileName, coverMime;
+    if (customCover) {
+      var ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[customCover.mime] || 'png';
+      coverFileName = 'cover.' + ext;
+      coverMime = customCover.mime;
+      zip.file('OEBPS/images/' + coverFileName, customCover.data);
+    } else {
+      coverFileName = 'cover.svg';
+      coverMime = 'image/svg+xml';
+      zip.file('OEBPS/images/cover.svg', buildCoverSvg(title, author));
+    }
 
     var coverXhtml =
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -704,7 +814,7 @@
       '<head><meta charset="UTF-8"/><title>Cover</title>\n' +
       '<style>body { margin: 0; padding: 0; text-align: center; } img { max-width: 100%; max-height: 100%; }</style>\n' +
       '</head>\n' +
-      '<body epub:type="cover"><img src="../images/cover.svg" alt="Cover"/></body>\n' +
+      '<body epub:type="cover"><img src="../images/' + coverFileName + '" alt="Cover"/></body>\n' +
       '</html>';
     zip.file('OEBPS/text/cover.xhtml', coverXhtml);
 
@@ -850,7 +960,7 @@
       '  </metadata>\n' +
       '  <manifest>\n' +
       '    <item id="cover" href="text/cover.xhtml" media-type="application/xhtml+xml"/>\n' +
-      '    <item id="cover-image" href="images/cover.svg" media-type="image/svg+xml" properties="cover-image"/>\n' +
+      '    <item id="cover-image" href="images/' + coverFileName + '" media-type="' + coverMime + '" properties="cover-image"/>\n' +
       '    <item id="content" href="text/content.xhtml" media-type="application/xhtml+xml"/>\n' +
       '    <item id="style" href="style.css" media-type="text/css"/>\n' +
       '    <item id="nav" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>\n' +
@@ -956,11 +1066,30 @@
     clearBtn.style.display = '';
     metaFields.classList.add('visible');
     actionRow.classList.add('visible');
+    coverSection.classList.add('visible');
     statusEl.classList.remove('visible');
+    customCover = null;
+    resetCoverBtn.style.display = 'none';
+
+    updateCoverPreview();
 
     // Show preview
     previewBody.innerHTML = bodyXhtml;
     preview.classList.add('visible');
+  }
+
+  function updateCoverPreview() {
+    if (customCover) {
+      var blob = new Blob([customCover.data], { type: customCover.mime });
+      var img = document.createElement('img');
+      img.src = URL.createObjectURL(blob);
+      coverPreview.innerHTML = '';
+      coverPreview.appendChild(img);
+    } else {
+      var t = titleInput.value.trim() || bookTitle || 'Untitled';
+      var a = authorInput.value.trim() || bookAuthor || 'Unknown';
+      coverPreview.innerHTML = buildCoverSvg(t, a);
+    }
   }
 
   function clearAll() {
@@ -973,10 +1102,14 @@
     titleInput.value = '';
     authorInput.value = '';
     fileInfo.textContent = '';
+    customCover = null;
     dropZone.classList.remove('has-data');
     clearBtn.style.display = 'none';
     metaFields.classList.remove('visible');
     actionRow.classList.remove('visible');
+    coverSection.classList.remove('visible');
+    coverPreview.innerHTML = '';
+    resetCoverBtn.style.display = 'none';
     statusEl.classList.remove('visible');
     preview.classList.remove('visible');
     previewBody.innerHTML = '';
@@ -1033,6 +1166,54 @@
     var file = e.dataTransfer.files[0];
     if (file) processFile(file);
   });
+
+  // Cover: click to browse, drag-and-drop to replace
+  function loadCoverFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      customCover = { data: new Uint8Array(e.target.result), mime: file.type };
+      resetCoverBtn.style.display = '';
+      updateCoverPreview();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  coverPreview.addEventListener('click', function() { coverFileInput.click(); });
+  coverFileInput.addEventListener('change', function() {
+    if (coverFileInput.files[0]) loadCoverFile(coverFileInput.files[0]);
+  });
+  ['dragenter', 'dragover'].forEach(function(name) {
+    coverPreview.addEventListener(name, function(e) {
+      e.preventDefault(); e.stopPropagation();
+      coverPreview.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function(name) {
+    coverPreview.addEventListener(name, function(e) {
+      e.preventDefault(); e.stopPropagation();
+      coverPreview.classList.remove('drag-over');
+    });
+  });
+  coverPreview.addEventListener('drop', function(e) {
+    if (e.dataTransfer.files[0]) loadCoverFile(e.dataTransfer.files[0]);
+  });
+  resetCoverBtn.addEventListener('click', function() {
+    customCover = null;
+    resetCoverBtn.style.display = 'none';
+    coverFileInput.value = '';
+    updateCoverPreview();
+  });
+
+  // Refresh cover preview when title/author changes
+  var coverRefreshTimer = null;
+  function debouncedCoverRefresh() {
+    clearTimeout(coverRefreshTimer);
+    coverRefreshTimer = setTimeout(function() {
+      if (!customCover && coverSection.classList.contains('visible')) updateCoverPreview();
+    }, 300);
+  }
+  titleInput.addEventListener('input', debouncedCoverRefresh);
+  authorInput.addEventListener('input', debouncedCoverRefresh);
 
   // Convert button
   convertBtn.addEventListener('click', function() {
