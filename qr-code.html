@@ -92,6 +92,8 @@
     border-radius: 12px;
     background: var(--panel);
     overflow: hidden;
+    position: relative;
+    transition: border-color 0.15s, background 0.15s;
   }
   .preview-area canvas {
     max-width: 100%;
@@ -103,35 +105,20 @@
     font-size: 0.9rem;
   }
 
-  .logo-drop-zone {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px dashed var(--border-strong);
-    border-radius: 10px;
-    padding: 1.25rem 1rem;
-    text-align: center;
-    background: var(--panel);
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    font-size: 0.88rem;
-    color: var(--muted);
-    gap: 0.5rem;
-  }
-  .logo-drop-zone:hover,
-  .logo-drop-zone.drag-over {
+  .preview-area.drag-over {
     border-color: var(--accent);
     background: var(--panel-active);
   }
-  .logo-drop-zone:focus-within {
-    outline: 2px solid var(--accent);
-    outline-offset: 3px;
-  }
-  .logo-drop-zone .logo-preview-thumb {
-    width: 36px;
-    height: 36px;
-    object-fit: contain;
-    border-radius: 4px;
+  .preview-hint {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+    pointer-events: none;
+    opacity: 0.7;
   }
 
   input[type="file"] {
@@ -241,17 +228,11 @@
   <div class="preview-area" id="previewArea">
     <span class="preview-placeholder" id="placeholder">Enter a URL above to generate a QR code</span>
     <canvas id="previewCanvas" style="display:none"></canvas>
+    <span class="preview-hint" id="logoHint" style="display:none">Drop a logo onto the QR code</span>
+    <input type="file" id="logoInput" accept="image/*">
   </div>
-
-  <div class="section">
-    <label class="field-label">Logo (optional)</label>
-    <label class="logo-drop-zone" id="logoDropZone" for="logoInput">
-      <span id="logoDropText">Drop an image here or click to choose</span>
-      <input type="file" id="logoInput" accept="image/*">
-    </label>
-    <div class="row" style="margin-top:0.5rem">
-      <button class="btn-secondary" id="removeLogo" style="display:none">Remove logo</button>
-    </div>
+  <div class="row" style="margin-top:0.5rem">
+    <button class="btn-secondary" id="removeLogo" style="display:none">Remove logo</button>
   </div>
 
   <div class="section">
@@ -282,10 +263,10 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
   const urlInput = document.getElementById('urlInput');
+  const previewArea = document.getElementById('previewArea');
   const previewCanvas = document.getElementById('previewCanvas');
   const placeholder = document.getElementById('placeholder');
-  const logoDropZone = document.getElementById('logoDropZone');
-  const logoDropText = document.getElementById('logoDropText');
+  const logoHint = document.getElementById('logoHint');
   const logoInput = document.getElementById('logoInput');
   const removeLogo = document.getElementById('removeLogo');
   const frameToggle = document.getElementById('frameToggle');
@@ -295,8 +276,76 @@
   const downloadBtn = document.getElementById('downloadBtn');
 
   let logoImg = null;
+  let logoColor = null;
   let currentFrame = 'card';
   let debounceTimer = null;
+
+  // --- Color extraction ---
+
+  function extractDominantColor(img) {
+    const size = 64;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, size, size);
+    const data = ctx.getImageData(0, 0, size, size).data;
+
+    // Bucket pixels by hue, pick most frequent saturated color
+    let rSum = 0, gSum = 0, bSum = 0, count = 0;
+    const buckets = new Map();
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+      if (a < 128) continue;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      const sat = max === min ? 0 : (max - min) / (l > 127 ? (510 - max - min) : (max + min));
+      // Skip near-white, near-black, low-saturation
+      if (l > 240 || l < 15 || sat < 0.15) continue;
+      // Quantize to 12-bit color
+      const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      const entry = buckets.get(key);
+      if (entry) {
+        entry.r += r; entry.g += g; entry.b += b; entry.n++;
+      } else {
+        buckets.set(key, { r, g, b, n: 1 });
+      }
+      rSum += r; gSum += g; bSum += b; count++;
+    }
+
+    // Find largest bucket
+    let best = null, bestN = 0;
+    for (const entry of buckets.values()) {
+      if (entry.n > bestN) { best = entry; bestN = entry.n; }
+    }
+
+    if (!best || bestN < 10) {
+      // Fallback: average of all non-trivial pixels
+      if (count < 10) return null;
+      const ar = Math.round(rSum / count);
+      const ag = Math.round(gSum / count);
+      const ab = Math.round(bSum / count);
+      return ensureContrast(ar, ag, ab);
+    }
+
+    const ar = Math.round(best.r / best.n);
+    const ag = Math.round(best.g / best.n);
+    const ab = Math.round(best.b / best.n);
+    return ensureContrast(ar, ag, ab);
+  }
+
+  function ensureContrast(r, g, b) {
+    // Darken if too light against white (WCAG luminance ratio >= 3:1)
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    if (lum > 0.55) {
+      const factor = 0.55 / lum;
+      r = Math.round(r * factor);
+      g = Math.round(g * factor);
+      b = Math.round(b * factor);
+    }
+    return `rgb(${r},${g},${b})`;
+  }
 
   // --- Utility ---
 
@@ -322,12 +371,12 @@
     return false;
   }
 
-  function drawFinderPattern(ctx, x, y, size) {
+  function drawFinderPattern(ctx, x, y, size, color) {
     const u = size / 7;
     const r1 = u * 0.8;
     const r2 = u * 0.6;
 
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = color;
     roundedRect(ctx, x, y, size, size, r1);
     ctx.fill();
 
@@ -335,7 +384,7 @@
     roundedRect(ctx, x + u, y + u, u * 5, u * 5, r2);
     ctx.fill();
 
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = color;
     roundedRect(ctx, x + u * 2, y + u * 2, u * 3, u * 3, r2);
     ctx.fill();
   }
@@ -346,6 +395,7 @@
     const data = urlInput.value.trim();
     if (!data) {
       previewCanvas.style.display = 'none';
+      logoHint.style.display = 'none';
       placeholder.style.display = '';
       downloadBtn.disabled = true;
       return;
@@ -358,6 +408,7 @@
       qr.make();
     } catch (e) {
       previewCanvas.style.display = 'none';
+      logoHint.style.display = 'none';
       placeholder.textContent = 'Text too long for QR encoding';
       placeholder.style.display = '';
       downloadBtn.disabled = true;
@@ -366,6 +417,7 @@
 
     placeholder.style.display = 'none';
     previewCanvas.style.display = '';
+    logoHint.style.display = logoImg ? 'none' : '';
     downloadBtn.disabled = false;
 
     const moduleCount = qr.getModuleCount();
@@ -441,6 +493,7 @@
     ctx.fillRect(qrOffX, qrOffY, qrTotalSize, qrTotalSize);
 
     // --- Draw QR modules ---
+    const qrColor = logoColor || '#000000';
     const gap = moduleSize * 0.12;
     const dotSize = moduleSize - gap;
     const dotR = dotSize * 0.28;
@@ -459,7 +512,7 @@
             col >= logoZoneStart && col < logoZoneEnd) continue;
         if (!qr.isDark(row, col)) continue;
 
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = qrColor;
         const dx = mX + col * moduleSize + gap / 2;
         const dy = mY + row * moduleSize + gap / 2;
         roundedRect(ctx, dx, dy, dotSize, dotSize, dotR);
@@ -469,9 +522,9 @@
 
     // --- Draw finder patterns ---
     const fpSize = moduleSize * 7;
-    drawFinderPattern(ctx, mX, mY, fpSize);
-    drawFinderPattern(ctx, mX + (moduleCount - 7) * moduleSize, mY, fpSize);
-    drawFinderPattern(ctx, mX, mY + (moduleCount - 7) * moduleSize, fpSize);
+    drawFinderPattern(ctx, mX, mY, fpSize, qrColor);
+    drawFinderPattern(ctx, mX + (moduleCount - 7) * moduleSize, mY, fpSize, qrColor);
+    drawFinderPattern(ctx, mX, mY + (moduleCount - 7) * moduleSize, fpSize, qrColor);
 
     // --- Draw logo ---
     if (logoImg) {
@@ -513,7 +566,7 @@
     // --- Draw frame decorations ---
     if (useFrame && currentFrame === 'card' && labelText) {
       const fontSize = Math.round(qrTotalSize * 0.055);
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = qrColor;
       ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -529,7 +582,7 @@
       const x2 = canvasW - inset;
       const y2Limit = canvasH - (labelText ? labelH : 0) - inset;
 
-      ctx.strokeStyle = '#000000';
+      ctx.strokeStyle = qrColor;
       ctx.lineWidth = lw;
       ctx.lineCap = 'round';
 
@@ -560,7 +613,7 @@
 
       if (labelText) {
         const fontSize = Math.round(qrTotalSize * 0.05);
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = qrColor;
         ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -574,7 +627,7 @@
       const bannerR = 24;
 
       // Banner strip at bottom
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = qrColor;
       ctx.beginPath();
       ctx.moveTo(0, bannerY);
       ctx.lineTo(canvasW, bannerY);
@@ -613,15 +666,9 @@
       const img = new Image();
       img.onload = function() {
         logoImg = img;
+        logoColor = extractDominantColor(img);
         removeLogo.style.display = '';
-        // Show thumbnail in drop zone
-        const existing = logoDropZone.querySelector('.logo-preview-thumb');
-        if (existing) existing.remove();
-        const thumb = document.createElement('img');
-        thumb.className = 'logo-preview-thumb';
-        thumb.src = e.target.result;
-        logoDropZone.insertBefore(thumb, logoDropText);
-        logoDropText.textContent = file.name;
+        logoHint.style.display = 'none';
         render();
       };
       img.src = e.target.result;
@@ -631,11 +678,9 @@
 
   function clearLogo() {
     logoImg = null;
+    logoColor = null;
     removeLogo.style.display = 'none';
     logoInput.value = '';
-    const existing = logoDropZone.querySelector('.logo-preview-thumb');
-    if (existing) existing.remove();
-    logoDropText.textContent = 'Drop an image here or click to choose';
     render();
   }
 
@@ -649,22 +694,22 @@
 
   removeLogo.addEventListener('click', clearLogo);
 
-  // Logo drag-and-drop
+  // Logo drag-and-drop onto preview area
   ['dragenter', 'dragover'].forEach(function(name) {
-    logoDropZone.addEventListener(name, function(e) {
+    previewArea.addEventListener(name, function(e) {
       e.preventDefault();
       e.stopPropagation();
-      logoDropZone.classList.add('drag-over');
+      previewArea.classList.add('drag-over');
     });
   });
   ['dragleave', 'drop'].forEach(function(name) {
-    logoDropZone.addEventListener(name, function(e) {
+    previewArea.addEventListener(name, function(e) {
       e.preventDefault();
       e.stopPropagation();
-      logoDropZone.classList.remove('drag-over');
+      previewArea.classList.remove('drag-over');
     });
   });
-  logoDropZone.addEventListener('drop', function(e) {
+  previewArea.addEventListener('drop', function(e) {
     var file = e.dataTransfer.files && e.dataTransfer.files[0];
     if (file) setLogo(file);
   });
