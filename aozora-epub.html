@@ -254,6 +254,10 @@
     -webkit-text-emphasis: filled sesame;
     text-emphasis: filled sesame;
   }
+  .preview-inner .colophon { margin-top: 3em; font-size: 0.85em; }
+  .preview-inner .colophon p { text-indent: 0; margin: 0.2em 0; }
+  .preview-inner h1 { text-indent: 0; }
+  .preview-inner h2, .preview-inner h3, .preview-inner h4 { text-indent: 0; }
 
   footer {
     margin-top: 2.5rem;
@@ -1088,8 +1092,16 @@
 
     updateCoverPreview();
 
-    // Show preview
-    previewBody.innerHTML = bodyXhtml;
+    // Show preview — match EPUB content structure
+    var previewHtml = '<h1>' + escapeXml(bookTitle) + '</h1>\n<p>' + escapeXml(bookAuthor) + '</p>\n' + bodyXhtml;
+    if (bookColophon) {
+      previewHtml += '<div class="colophon">';
+      bookColophon.split('\n').forEach(function(line) {
+        previewHtml += '<p>' + escapeXml(line) + '</p>';
+      });
+      previewHtml += '</div>';
+    }
+    previewBody.innerHTML = previewHtml;
     preview.classList.add('visible');
     // Scroll to start (right edge in vertical-rl)
     requestAnimationFrame(function() { document.getElementById('previewScroll').scrollLeft = 0; });
