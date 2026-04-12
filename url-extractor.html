@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>URL Extractor</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111418;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --border-strong: #cbd5e1;
+    --panel: #f8fafc;
+    --panel-active: #eff6ff;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #f1f5f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eaed;
+      --muted: #9aa0a6;
+      --border: #262a30;
+      --border-strong: #3a3f47;
+      --panel: #14171c;
+      --panel-active: #17253f;
+      --accent: #60a5fa;
+      --accent-hover: #93c5fd;
+      --code-bg: #1a1f26;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 2rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 620px; }
+
+  h1 { font-size: 1.75rem; font-weight: 600; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
+  p.lead { color: var(--muted); margin: 0 0 2rem; font-size: 0.95rem; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  label.field-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.4rem;
+    color: var(--fg);
+  }
+
+  input[type="text"] {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.95rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    transition: border-color 0.15s;
+    font-family: inherit;
+  }
+  input[type="text"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  input[type="text"]::placeholder { color: var(--muted); opacity: 0.7; }
+
+  textarea {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.85rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    transition: border-color 0.15s;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  textarea::placeholder { color: var(--muted); opacity: 0.7; font-family: inherit; }
+
+  .section { margin-top: 1.5rem; }
+
+  .row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+  .btn-row { margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+  .btn-primary {
+    padding: 0.6rem 1.4rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-secondary {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  .preset-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+  .preset-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.78rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-weight: 400;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--code-bg);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .preset-btn:hover {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+
+  .results-area {
+    margin-top: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .results-count {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 0.82rem;
+  }
+  .results-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  .results-list li {
+    padding: 0.5rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    word-break: break-all;
+    line-height: 1.4;
+  }
+  .results-list li:last-child { border-bottom: none; }
+  .results-list li:hover { background: var(--panel-active); }
+
+  .empty-state {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .drop-zone {
+    border: 2px dashed var(--border-strong);
+    border-radius: 10px;
+    padding: 0.75rem;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .drop-zone.has-data {
+    border-style: solid;
+    border-color: var(--border);
+  }
+  .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .drop-zone textarea {
+    border: none;
+    background: transparent;
+    padding: 0;
+    resize: none;
+    cursor: default;
+  }
+  .drop-zone textarea:focus {
+    box-shadow: none;
+  }
+  .drop-zone textarea::placeholder {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 0.9rem;
+  }
+  .drop-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .help-text {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  footer {
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>URL Extractor</h1>
+  <p class="lead">Paste page source to extract URLs by CSS selector and attribute. Everything runs in your browser.</p>
+
+  <div>
+    <label class="field-label" for="htmlInput">HTML source</label>
+    <div class="drop-zone" id="dropZone">
+      <textarea id="htmlInput" rows="3" placeholder="Paste HTML source here (Cmd+U / Ctrl+U in browser to view source)" readonly></textarea>
+      <input type="file" id="fileInput" accept=".html,.htm,.txt,.xml" style="display:none">
+      <div class="drop-actions">
+        <button class="btn-secondary" id="browseBtn">Browse file</button>
+        <button class="btn-secondary" id="clearHtmlBtn" style="display:none">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <label class="field-label" for="selectorInput">CSS selector</label>
+    <input type="text" id="selectorInput" placeholder="e.g. [data-mp3], a[href], img[src]">
+    <div class="preset-row">
+      <button class="preset-btn" data-selector="a[href]" data-attr="href">a[href]</button>
+      <button class="preset-btn" data-selector="img[src]" data-attr="src">img[src]</button>
+      <button class="preset-btn" data-selector="[data-mp3]" data-attr="data-mp3">data-mp3</button>
+      <button class="preset-btn" data-selector="audio source[src]" data-attr="src">audio src</button>
+      <button class="preset-btn" data-selector="video source[src]" data-attr="src">video src</button>
+      <button class="preset-btn" data-selector="link[href]" data-attr="href">link[href]</button>
+      <button class="preset-btn" data-selector="script[src]" data-attr="src">script[src]</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <label class="field-label" for="attrInput">Attribute to extract</label>
+    <input type="text" id="attrInput" placeholder="e.g. href, src, data-mp3">
+    <p class="help-text">Leave empty to extract text content instead.</p>
+  </div>
+
+  <div class="section">
+    <label class="field-label" for="filterInput">Filter results (optional)</label>
+    <input type="text" id="filterInput" placeholder="e.g. .mp3, .jpg, https://cdn">
+    <p class="help-text">Only show results containing this substring.</p>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-primary" id="extractBtn">Extract</button>
+  </div>
+
+  <div class="results-area" id="resultsArea" style="display:none">
+    <div class="results-header">
+      <span>Results</span>
+      <span class="results-count" id="resultsCount"></span>
+    </div>
+    <div id="resultsBody">
+      <ul class="results-list" id="resultsList"></ul>
+    </div>
+    <div style="padding: 0.5rem 0.85rem; border-top: 1px solid var(--border);">
+      <button class="btn-secondary" id="copyAllBtn">Copy all</button>
+    </div>
+  </div>
+
+  <footer>
+    <!-- TOOL_META_START --><!-- TOOL_META_END -->
+  </footer>
+</main>
+
+<script>
+  var htmlInput = document.getElementById('htmlInput');
+  var dropZone = document.getElementById('dropZone');
+  var fileInput = document.getElementById('fileInput');
+  var browseBtn = document.getElementById('browseBtn');
+  var clearHtmlBtn = document.getElementById('clearHtmlBtn');
+  var selectorInput = document.getElementById('selectorInput');
+  var attrInput = document.getElementById('attrInput');
+  var filterInput = document.getElementById('filterInput');
+  var extractBtn = document.getElementById('extractBtn');
+  var resultsArea = document.getElementById('resultsArea');
+  var resultsCount = document.getElementById('resultsCount');
+  var resultsList = document.getElementById('resultsList');
+  var copyAllBtn = document.getElementById('copyAllBtn');
+
+  var rawHtml = '';
+  var currentResults = [];
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function setHtmlData(text) {
+    rawHtml = text;
+    var lines = text.split('\n').length;
+    var size = new Blob([text]).size;
+    htmlInput.value = '[Pasted ' + lines.toLocaleString() + ' lines \u00b7 ' + formatSize(size) + ']';
+    dropZone.classList.add('has-data');
+    clearHtmlBtn.style.display = '';
+  }
+
+  function clearHtmlData() {
+    rawHtml = '';
+    htmlInput.value = '';
+    dropZone.classList.remove('has-data');
+    clearHtmlBtn.style.display = 'none';
+    resultsArea.style.display = 'none';
+  }
+
+  // Intercept paste — store raw text, show summary
+  htmlInput.addEventListener('paste', function(e) {
+    e.preventDefault();
+    var text = (e.clipboardData || window.clipboardData).getData('text');
+    if (text) setHtmlData(text);
+  });
+
+  // Make textarea focusable for paste despite readonly
+  htmlInput.addEventListener('click', function() { htmlInput.focus(); });
+
+  // File browse
+  browseBtn.addEventListener('click', function() { fileInput.click(); });
+  fileInput.addEventListener('change', function() {
+    var file = fileInput.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) { setHtmlData(e.target.result); };
+    reader.readAsText(file);
+  });
+
+  // File drag-and-drop
+  ['dragenter', 'dragover'].forEach(function(name) {
+    dropZone.addEventListener(name, function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function(name) {
+    dropZone.addEventListener(name, function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+    });
+  });
+  dropZone.addEventListener('drop', function(e) {
+    var file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) {
+      var reader = new FileReader();
+      reader.onload = function(ev) { setHtmlData(ev.target.result); };
+      reader.readAsText(file);
+    }
+  });
+
+  clearHtmlBtn.addEventListener('click', clearHtmlData);
+
+  // Preset buttons
+  document.querySelector('.preset-row').addEventListener('click', function(e) {
+    var btn = e.target.closest('.preset-btn');
+    if (!btn) return;
+    selectorInput.value = btn.dataset.selector;
+    attrInput.value = btn.dataset.attr;
+  });
+
+  extractBtn.addEventListener('click', extract);
+
+  // Ctrl/Cmd+Enter to extract
+  document.addEventListener('keydown', function(e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      extract();
+    }
+  });
+
+  function extract() {
+    if (!rawHtml) return;
+    var selector = selectorInput.value.trim();
+    var attr = attrInput.value.trim();
+    var filter = filterInput.value.trim().toLowerCase();
+
+    if (!selector) {
+      selectorInput.focus();
+      return;
+    }
+
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(rawHtml, 'text/html');
+
+    var elements;
+    try {
+      elements = doc.querySelectorAll(selector);
+    } catch (e) {
+      resultsList.innerHTML = '';
+      var li = document.createElement('li');
+      li.textContent = 'Invalid CSS selector: ' + e.message;
+      li.style.color = '#ef4444';
+      resultsList.appendChild(li);
+      resultsArea.style.display = '';
+      resultsCount.textContent = 'error';
+      return;
+    }
+
+    var values = [];
+    var seen = new Set();
+    for (var i = 0; i < elements.length; i++) {
+      var val = attr ? elements[i].getAttribute(attr) : elements[i].textContent.trim();
+      if (!val) continue;
+      if (seen.has(val)) continue;
+      seen.add(val);
+      if (filter && val.toLowerCase().indexOf(filter) === -1) continue;
+      values.push(val);
+    }
+
+    currentResults = values;
+    resultsList.innerHTML = '';
+
+    if (values.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No matches found.';
+      resultsList.appendChild(empty);
+    } else {
+      values.forEach(function(val) {
+        var li = document.createElement('li');
+        li.textContent = val;
+        resultsList.appendChild(li);
+      });
+    }
+
+    resultsCount.textContent = values.length + ' found';
+    resultsArea.style.display = '';
+  }
+
+  copyAllBtn.addEventListener('click', function() {
+    if (!currentResults.length) return;
+    navigator.clipboard.writeText(currentResults.join('\n')).then(function() {
+      var orig = copyAllBtn.textContent;
+      copyAllBtn.textContent = 'Copied!';
+      setTimeout(function() { copyAllBtn.textContent = orig; }, 1500);
+    });
+  });
+
+  // Prevent browser opening dropped files
+  window.addEventListener('dragover', function(e) { e.preventDefault(); });
+  window.addEventListener('drop', function(e) { e.preventDefault(); });
+</script>
+</body>
+</html>
