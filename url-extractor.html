@@ -130,11 +130,23 @@
     border-color: var(--accent);
     background: var(--panel-active);
   }
+  .drop-zone:not(.has-data) {
+    cursor: pointer;
+  }
+  .drop-zone:not(.has-data):hover {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
   .drop-zone textarea {
     border: none;
     background: transparent;
     padding: 0;
     resize: none;
+    cursor: inherit;
+    pointer-events: none;
+  }
+  .drop-zone.has-data textarea {
+    pointer-events: auto;
     cursor: default;
   }
   .drop-zone textarea:focus { box-shadow: none; }
@@ -375,7 +387,7 @@
     } else {
       shortcut = 'Ctrl+U';               // Windows/Linux
     }
-    htmlInput.placeholder = 'Paste HTML source here (' + shortcut + ' in browser to view source)';
+    htmlInput.placeholder = 'Click to paste \u00b7 ' + shortcut + ' in browser to view source';
   })();
 
   var rawHtml = '';
@@ -626,6 +638,7 @@
     activeAttr = null;
     currentResults = [];
     htmlInput.value = '';
+    htmlInput.style.pointerEvents = '';
     dropZone.classList.remove('has-data');
     clearHtmlBtn.style.display = 'none';
     attrsSection.style.display = 'none';
@@ -634,13 +647,30 @@
     filterInput.value = '';
   }
 
-  // Intercept paste
+  // Intercept paste (fallback for Cmd+V)
   htmlInput.addEventListener('paste', function(e) {
     e.preventDefault();
     var text = (e.clipboardData || window.clipboardData).getData('text');
     if (text) setHtmlData(text);
   });
-  htmlInput.addEventListener('click', function() { htmlInput.focus(); });
+
+  // Click drop-zone to auto-paste from clipboard
+  dropZone.addEventListener('click', function(e) {
+    if (rawHtml) return; // already has data
+    if (e.target === browseBtn || e.target === clearHtmlBtn || e.target === fileInput) return;
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function(text) {
+        if (text) setHtmlData(text);
+      }).catch(function() {
+        // Permission denied — fall back to manual paste
+        htmlInput.style.pointerEvents = 'auto';
+        htmlInput.focus();
+      });
+    } else {
+      htmlInput.style.pointerEvents = 'auto';
+      htmlInput.focus();
+    }
+  });
 
   // File browse
   browseBtn.addEventListener('click', function() { fileInput.click(); });
