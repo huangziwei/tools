@@ -12,24 +12,51 @@ repo root, everything runs in the browser.
 - Dark/light via `prefers-color-scheme`. Reuse CSS variables from any
   existing tool file for palette, typography, and max-width.
 
+## Page structure
+
+Every tool page follows this layout:
+
+```html
+<div class="page-header">
+  <h1>Tool Name</h1>
+  <!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->
+</div>
+<p class="lead">One-line description.</p>
+<!-- ... tool UI ... -->
+<footer>
+  All data stays on your device. &middot;
+  <!-- TOOL_META_START --><!-- TOOL_META_END -->
+</footer>
+```
+
+- `.page-header` is a flex row: h1 left, GitHub icon right.
+- `.lead` is the tool description. Do **not** add "Everything runs in
+  your browser" — the footer already conveys that.
+- Footer line 1 is text only (privacy note + date). Links stay in the
+  header icon. Optional "built with" credits go after the TOOL_META
+  region in the footer.
+
 ## Contract with the build automation
 
 A new tool at `<slug>.html` (repo root) must contain:
 
 - `<title>Tool Name</title>` — becomes the index entry title
-- `<p class="lead">One-line description.</p>` — becomes the index description
-- `<!-- TOOL_META_START --><!-- TOOL_META_END -->` in the footer — leave
-  empty; `scripts/build-tools.mjs` fills it with a source link and a
-  git-derived date
+- `<p class="lead">One-line description.</p>` — becomes the index
+  description
+- `<!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->` in the page
+  header — filled with a GitHub icon linking to the file's source
+- `<!-- TOOL_META_START --><!-- TOOL_META_END -->` in the footer —
+  filled with a git-derived date (YYYY/MM/DD HH:MM in author timezone)
 
 After commit + push, `.github/workflows/build-tools.yml` runs the script,
 which regenerates `TOOLS_LIST_START/END` in `index.html` and every tool's
-`TOOL_META_START/END` region. Filesystem is the registry — no manifest.
+`SOURCE_LINK_*` and `TOOL_META_*` regions. Filesystem is the registry — no
+manifest.
 
 ## Never
 
-- **Hand-edit marker regions** (`TOOLS_LIST_*`, `TOOL_META_*`). Overwritten
-  on every CI run.
+- **Hand-edit marker regions** (`TOOLS_LIST_*`, `TOOL_META_*`,
+  `SOURCE_LINK_*`). Overwritten on every CI run.
 - **Hand-edit tool dates.** Git is the source of truth — change the commit.
 - **Hardcode `huangziwei/tools` URLs.** The script derives them from
   `git remote get-url origin`.
