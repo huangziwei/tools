@@ -224,10 +224,8 @@
   .results-list li {
     padding: 0.5rem 0.85rem;
     border-bottom: 1px solid var(--border);
-    font-size: 0.82rem;
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-    word-break: break-all;
-    line-height: 1.4;
+    cursor: pointer;
+    transition: background 0.15s;
   }
   .results-list li:last-child { border-bottom: none; }
   .results-list li:hover { background: var(--panel-active); }
@@ -260,6 +258,31 @@
     border-radius: 4px;
     border: 1px solid var(--border);
     display: block;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(0);
+    padding: 0.5rem 1.2rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: var(--fg);
+    color: var(--bg);
+    border-radius: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 100;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .toast.hide {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0.5rem);
   }
 
   .empty-state {
@@ -321,6 +344,7 @@
     <!-- TOOL_META_START --><!-- TOOL_META_END -->
   </footer>
 </main>
+<div class="toast" id="toast"></div>
 
 <script>
   var htmlInput = document.getElementById('htmlInput');
@@ -345,6 +369,17 @@
   var activeAttr = null;
   var activeType = null;
   var currentResults = [];
+  var toastTimer = null;
+
+  function showToast(msg) {
+    var el = document.getElementById('toast');
+    clearTimeout(toastTimer);
+    el.textContent = msg;
+    el.className = 'toast show';
+    toastTimer = setTimeout(function() {
+      el.className = 'toast hide';
+    }, 1200);
+  }
 
   var IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'ico', 'bmp', 'avif'];
   var AUDIO_EXTS = ['mp3', 'aac', 'ogg', 'wav', 'flac', 'wma', 'm4a', 'opus'];
@@ -648,6 +683,19 @@
     }
   });
 
+  // Click result item to copy
+  resultsList.addEventListener('click', function(e) {
+    // Don't copy when interacting with audio/video controls
+    if (e.target.closest('audio, video')) return;
+    var li = e.target.closest('li');
+    if (!li) return;
+    var urlDiv = li.querySelector('.result-url');
+    if (!urlDiv) return;
+    navigator.clipboard.writeText(urlDiv.textContent).then(function() {
+      showToast('Copied URL');
+    });
+  });
+
   // Text filter re-applies to current selection
   filterInput.addEventListener('input', function() {
     if (!activeAttr) return;
@@ -659,9 +707,7 @@
   copyAllBtn.addEventListener('click', function() {
     if (!currentResults.length) return;
     navigator.clipboard.writeText(currentResults.join('\n')).then(function() {
-      var orig = copyAllBtn.textContent;
-      copyAllBtn.textContent = 'Copied!';
-      setTimeout(function() { copyAllBtn.textContent = orig; }, 1500);
+      showToast('Copied ' + currentResults.length + ' URLs');
     });
   });
 
