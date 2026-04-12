@@ -450,11 +450,21 @@
     while (bodyLines.length && !bodyLines[0].trim()) bodyLines.shift();
     while (bodyLines.length && !bodyLines[bodyLines.length - 1].trim()) bodyLines.pop();
 
-    // Multi-line state — use CSS class instead of <blockquote> to avoid nesting issues
+    // Multi-line state — use CSS classes on <p> instead of wrapping <div>s
+    // to avoid unclosed tag issues (same rationale as indent → class approach)
     var indentLevel = 0;
+    var blockStyles = []; // stack of active block CSS classes
     var headingId = 0;
     var tocEntries = []; // [{id, level, text}]
     var html = '';
+
+    // Block style mapping: annotation keyword → CSS class
+    var blockStyleMap = {
+      '横組み': 'yokogumi', 'ゴシック体': 'gothic', '斜体': 'italic',
+      '罫囲み': 'keigakomi', '枠囲み': 'keigakomi',
+      '破線罫囲み': 'keigakomi-dashed', '破線枠囲み': 'keigakomi-dashed',
+      '二重罫囲み': 'keigakomi-double', '二重枠囲み': 'keigakomi-double'
+    };
 
     for (var n = 0; n < bodyLines.length; n++) {
       var raw = bodyLines[n];
@@ -475,77 +485,31 @@
         continue;
       }
 
-      // Block-level 横組み start/end
-      if (/［＃ここから横組み］/.test(raw)) {
-        html += '<div class="yokogumi">\n';
-        raw = raw.replace(/［＃ここから横組み］/, '');
+      // Block-level style start: ［＃ここからXXX］
+      var blockStart = raw.match(/［＃ここから(横組み|ゴシック体|斜体|破線罫囲み|破線枠囲み|二重罫囲み|二重枠囲み|罫囲み|枠囲み)］/);
+      if (blockStart) {
+        blockStyles.push(blockStyleMap[blockStart[1]]);
+        raw = raw.replace(/［＃ここから(横組み|ゴシック体|斜体|破線罫囲み|破線枠囲み|二重罫囲み|二重枠囲み|罫囲み|枠囲み)］/, '');
         if (!raw.trim()) continue;
       }
-      if (/［＃ここで横組み終わり］/.test(raw)) {
-        raw = raw.replace(/［＃ここで横組み終わり］/, '');
-        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
-        html += '</div>\n';
-        continue;
+      // Block-level style end: ［＃ここでXXX終わり］
+      var blockEnd = raw.match(/［＃ここで(横組み|ゴシック体|斜体|[^］]*囲み)終わり］/);
+      if (blockEnd) {
+        blockStyles.pop();
+        raw = raw.replace(/［＃ここで[^］]*終わり］/, '');
+        if (!raw.trim()) continue;
       }
 
-      // Block-level ゴシック体 start/end
-      if (/［＃ここからゴシック体］/.test(raw)) {
-        html += '<div class="gothic">\n';
-        raw = raw.replace(/［＃ここからゴシック体］/, '');
-        if (!raw.trim()) continue;
-      }
-      if (/［＃ここでゴシック体終わり］/.test(raw)) {
-        raw = raw.replace(/［＃ここでゴシック体終わり］/, '');
-        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
-        html += '</div>\n';
-        continue;
-      }
-
-      // Block-level 斜体 start/end
-      if (/［＃ここから斜体］/.test(raw)) {
-        html += '<div class="italic">\n';
-        raw = raw.replace(/［＃ここから斜体］/, '');
-        if (!raw.trim()) continue;
-      }
-      if (/［＃ここで斜体終わり］/.test(raw)) {
-        raw = raw.replace(/［＃ここで斜体終わり］/, '');
-        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
-        html += '</div>\n';
-        continue;
-      }
-
-      // Block-level 罫囲み start/end
-      if (/［＃ここから(罫囲み|枠囲み)］/.test(raw)) {
-        html += '<div class="keigakomi">\n';
-        raw = raw.replace(/［＃ここから(罫囲み|枠囲み)］/, '');
-        if (!raw.trim()) continue;
-      }
-      if (/［＃ここから破線(罫囲み|枠囲み)］/.test(raw)) {
-        html += '<div class="keigakomi-dashed">\n';
-        raw = raw.replace(/［＃ここから破線(罫囲み|枠囲み)］/, '');
-        if (!raw.trim()) continue;
-      }
-      if (/［＃ここから二重(罫囲み|枠囲み)］/.test(raw)) {
-        html += '<div class="keigakomi-double">\n';
-        raw = raw.replace(/［＃ここから二重(罫囲み|枠囲み)］/, '');
-        if (!raw.trim()) continue;
-      }
-      if (/［＃ここで(罫囲み|枠囲み|破線罫囲み|破線枠囲み|二重罫囲み|二重枠囲み)終わり］/.test(raw)) {
-        raw = raw.replace(/［＃ここで[^］]*囲み終わり］/, '');
-        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
-        html += '</div>\n';
-        continue;
-      }
-
-      // Page/section breaks: ［＃改ページ］ ［＃改丁］ ［＃ページの左右中央］
+      // Page/section breaks: reset all block state
       if (/［＃(改ページ|改丁|ページの左右中央)］/.test(raw)) {
         indentLevel = 0;
+        blockStyles = [];
         if (/^［＃(改ページ|改丁|ページの左右中央)］\s*$/.test(raw.trim())) continue;
         raw = raw.replace(/［＃(改ページ|改丁|ページの左右中央)］/g, '');
       }
 
-      // Reset indent before headings
-      if (/［＃[大中小]見出し］/.test(raw)) indentLevel = 0;
+      // Reset block state before headings
+      if (/［＃[大中小]見出し］/.test(raw)) { indentLevel = 0; blockStyles = []; }
 
       // Headings: ［＃大見出し］text［＃大見出し終わり］
       var headingMatch = raw.match(/［＃大見出し］(.+?)［＃大見出し終わり］/);
@@ -584,8 +548,11 @@
         continue;
       }
 
-      var pClass = indentLevel > 0 ? ' class="indent"' : '';
-      html += '<p' + pClass + '>' + convertAozoraLine(raw) + '</p>\n';
+      var classes = [];
+      if (indentLevel > 0) classes.push('indent');
+      for (var bs = 0; bs < blockStyles.length; bs++) classes.push(blockStyles[bs]);
+      var pAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
+      html += '<p' + pAttr + '>' + convertAozoraLine(raw) + '</p>\n';
     }
 
     return { title: title, author: author, body: html, toc: tocEntries, colophon: colophon };
@@ -684,62 +651,48 @@
     });
 
     // --- Postfix annotations: ［＃「text」にXXX］ ---
-    // Collect and apply all postfix annotations in one pass
-    var postfixTargets = [];
-    s = s.replace(/［＃「([^」]+)」に傍点］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'em class="sesame"', close: 'em' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」に傍線］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'span class="underline"', close: 'span' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」に二重傍線］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'span class="underline-double"', close: 'span' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」に波線］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'span class="underline-wavy"', close: 'span' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」に破線］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'span class="underline-dashed"', close: 'span' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」に鎖線］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'span class="underline-dotted"', close: 'span' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」は太字］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'strong', close: 'strong' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」はゴシック体］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'span class="gothic"', close: 'span' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」は斜体］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'i', close: 'i' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」は(罫囲み|枠囲み)］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'span class="keigakomi"', close: 'span' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」は行右小書き］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'sup', close: 'sup' });
-      return '';
-    });
-    s = s.replace(/［＃「([^」]+)」は行左小書き］/g, function(_, text) {
-      postfixTargets.push({ text: text, tag: 'sub', close: 'sub' });
-      return '';
-    });
-    // Apply postfix targets — wrap last occurrence of each text
-    for (var pi = 0; pi < postfixTargets.length; pi++) {
-      var pt = postfixTargets[pi];
-      var idx = s.lastIndexOf(pt.text);
-      if (idx !== -1) {
-        s = s.substring(0, idx) + '<' + pt.tag + '>' + pt.text + '</' + pt.close + '>' + s.substring(idx + pt.text.length);
+    // AozoraEpub3 approach: find annotation position, walk backward to find
+    // the immediately preceding occurrence of text (skipping HTML tags).
+    // We process right-to-left so positions stay valid after insertion.
+    var postfixMap = {
+      'に傍点': ['em class="sesame"', 'em'],
+      'に傍線': ['span class="underline"', 'span'],
+      'に二重傍線': ['span class="underline-double"', 'span'],
+      'に波線': ['span class="underline-wavy"', 'span'],
+      'に破線': ['span class="underline-dashed"', 'span'],
+      'に鎖線': ['span class="underline-dotted"', 'span'],
+      'は太字': ['strong', 'strong'],
+      'はゴシック体': ['span class="gothic"', 'span'],
+      'は斜体': ['i', 'i'],
+      'は罫囲み': ['span class="keigakomi"', 'span'],
+      'は枠囲み': ['span class="keigakomi"', 'span'],
+      'は行右小書き': ['sup', 'sup'],
+      'は行左小書き': ['sub', 'sub']
+    };
+    var postfixKeys = Object.keys(postfixMap).sort(function(a, b) { return b.length - a.length; });
+    var postfixRe = new RegExp('［＃「([^」]+)」(' + postfixKeys.map(function(k) {
+      return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|') + ')］', 'g');
+
+    // Collect all matches with positions (before any modification)
+    var postfixMatches = [];
+    var pm;
+    while ((pm = postfixRe.exec(s)) !== null) {
+      postfixMatches.push({ idx: pm.index, len: pm[0].length, text: pm[1], key: pm[2] });
+    }
+    // Process right-to-left so splicing doesn't shift earlier positions
+    for (var pi = postfixMatches.length - 1; pi >= 0; pi--) {
+      var pf = postfixMatches[pi];
+      var tags = postfixMap[pf.key];
+      if (!tags) continue;
+      // Remove the annotation
+      s = s.substring(0, pf.idx) + s.substring(pf.idx + pf.len);
+      // Walk backward from annotation position to find the target text
+      // Search in the plain-text content immediately before the annotation
+      var searchArea = s.substring(0, pf.idx);
+      var targetIdx = searchArea.lastIndexOf(pf.text);
+      if (targetIdx !== -1) {
+        s = s.substring(0, targetIdx) + '<' + tags[0] + '>' + pf.text + '</' + tags[1] + '>' + s.substring(targetIdx + pf.text.length);
       }
     }
 
@@ -1036,33 +989,53 @@
       '</html>';
     zip.file('OEBPS/text/cover.xhtml', coverXhtml);
 
-    // Content XHTML
-    var contentXhtml =
-      '<?xml version="1.0" encoding="UTF-8"?>\n' +
-      '<!DOCTYPE html>\n' +
-      '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ja" lang="ja">\n' +
-      '<head>\n' +
-      '  <meta charset="UTF-8"/>\n' +
-      '  <title>' + escapeXml(title) + '</title>\n' +
-      '  <link rel="stylesheet" type="text/css" href="../style.css"/>\n' +
-      '</head>\n' +
-      '<body>\n' +
-      '<h1>' + escapeXml(title) + '</h1>\n' +
-      '<p>' + escapeXml(author) + '</p>\n' +
-      bodyXhtml + '\n';
+    // --- Split body into chapters at <h2> boundaries ---
+    var chapters = []; // [{file, title, body}]
+    var h2splits = bodyXhtml.split(/(?=<h2[\s>])/);
 
-    // Colophon section
-    if (colophon) {
-      contentXhtml += '<div class="colophon" id="colophon">\n';
-      var cLines = colophon.split('\n');
-      for (var ci = 0; ci < cLines.length; ci++) {
-        contentXhtml += '<p>' + escapeXml(cLines[ci]) + '</p>\n';
-      }
-      contentXhtml += '</div>\n';
+    // First chunk = title page (everything before first h2)
+    var titleBody = '<h1>' + escapeXml(title) + '</h1>\n<p>' + escapeXml(author) + '</p>\n' + h2splits[0];
+    chapters.push({ file: 'title.xhtml', title: title, body: titleBody });
+
+    // Each h2 starts a new chapter
+    for (var si = 1; si < h2splits.length; si++) {
+      var chBody = h2splits[si];
+      // Extract chapter title from the h2 tag
+      var chTitleMatch = chBody.match(/<h2[^>]*>(.+?)<\/h2>/);
+      var chTitle = chTitleMatch ? chTitleMatch[1].replace(/<[^>]+>/g, '') : 'Chapter ' + si;
+      chapters.push({ file: 'ch' + si + '.xhtml', title: chTitle, body: chBody });
     }
 
-    contentXhtml += '</body>\n</html>';
-    zip.file('OEBPS/text/content.xhtml', contentXhtml);
+    // Colophon as separate chapter
+    if (colophon) {
+      var colBody = '<div class="colophon" id="colophon">\n';
+      var cLines = colophon.split('\n');
+      for (var ci = 0; ci < cLines.length; ci++) {
+        colBody += '<p>' + escapeXml(cLines[ci]) + '</p>\n';
+      }
+      colBody += '</div>\n';
+      chapters.push({ file: 'colophon.xhtml', title: '底本情報', body: colBody });
+    }
+
+    // Write chapter XHTML files
+    function wrapXhtml(chTitle, chBody) {
+      return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        '<!DOCTYPE html>\n' +
+        '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ja" lang="ja">\n' +
+        '<head>\n' +
+        '  <meta charset="UTF-8"/>\n' +
+        '  <title>' + escapeXml(chTitle) + '</title>\n' +
+        '  <link rel="stylesheet" type="text/css" href="../style.css"/>\n' +
+        '</head>\n' +
+        '<body>\n' + chBody + '\n</body>\n</html>';
+    }
+    var chapterManifest = '';
+    var chapterSpine = '';
+    for (var ch = 0; ch < chapters.length; ch++) {
+      zip.file('OEBPS/text/' + chapters[ch].file, wrapXhtml(chapters[ch].title, chapters[ch].body));
+      chapterManifest += '    <item id="ch' + ch + '" href="text/' + chapters[ch].file + '" media-type="application/xhtml+xml"/>\n';
+      chapterSpine += '    <itemref idref="ch' + ch + '"/>\n';
+    }
 
     // Images
     var imageManifest = '';
@@ -1072,19 +1045,38 @@
       imageManifest += '    <item id="img' + i + '" href="images/' + escapeXml(img.name) + '" media-type="' + img.mime + '"/>\n';
     }
 
-    // Build TOC entries
-    // Nested: h2 = top level, h3/h4 = children of preceding h2
+    // Build file-to-chapter map for TOC links
+    // Each TOC entry's id (h1, h2, ...) maps to the chapter file containing it
+    var idToFile = {};
+    for (var ch = 0; ch < chapters.length; ch++) {
+      var idMatches = chapters[ch].body.match(/id="(h\d+)"/g);
+      if (idMatches) {
+        for (var im = 0; im < idMatches.length; im++) {
+          var hid = idMatches[im].match(/id="(h\d+)"/)[1];
+          idToFile[hid] = chapters[ch].file;
+        }
+      }
+    }
+
+    // Build TOC
+    function tocHref(entry) {
+      var f = idToFile[entry.id] || 'title.xhtml';
+      return 'text/' + f + '#' + entry.id;
+    }
+
     function buildNavOl(entries) {
-      if (!entries.length) return '<ol><li><a href="text/content.xhtml">' + escapeXml(title) + '</a></li>' +
-        (colophon ? '<li><a href="text/content.xhtml#colophon">底本情報</a></li>' : '') + '</ol>';
       var ol = '<ol>\n';
-      ol += '<li><a href="text/content.xhtml">' + escapeXml(title) + '</a></li>\n';
+      ol += '<li><a href="text/title.xhtml">' + escapeXml(title) + '</a></li>\n';
+      if (!entries.length && colophon) {
+        ol += '<li><a href="text/colophon.xhtml">底本情報</a></li>\n';
+        ol += '</ol>';
+        return ol;
+      }
       var i = 0;
       while (i < entries.length) {
         var e = entries[i];
         if (e.level === 2) {
-          ol += '<li><a href="text/content.xhtml#' + e.id + '">' + escapeXml(e.text) + '</a>';
-          // Collect children (h3, h4)
+          ol += '<li><a href="' + tocHref(e) + '">' + escapeXml(e.text) + '</a>';
           var children = [];
           i++;
           while (i < entries.length && entries[i].level > 2) {
@@ -1094,18 +1086,18 @@
           if (children.length) {
             ol += '\n<ol>\n';
             for (var c = 0; c < children.length; c++) {
-              ol += '<li><a href="text/content.xhtml#' + children[c].id + '">' + escapeXml(children[c].text) + '</a></li>\n';
+              ol += '<li><a href="' + tocHref(children[c]) + '">' + escapeXml(children[c].text) + '</a></li>\n';
             }
             ol += '</ol>\n';
           }
           ol += '</li>\n';
         } else {
-          ol += '<li><a href="text/content.xhtml#' + e.id + '">' + escapeXml(e.text) + '</a></li>\n';
+          ol += '<li><a href="' + tocHref(e) + '">' + escapeXml(e.text) + '</a></li>\n';
           i++;
         }
       }
       if (colophon) {
-        ol += '<li><a href="text/content.xhtml#colophon">底本情報</a></li>\n';
+        ol += '<li><a href="text/colophon.xhtml">底本情報</a></li>\n';
       }
       ol += '</ol>';
       return ol;
@@ -1132,12 +1124,12 @@
     var ncxPoints = '';
     ncxPoints += '  <navPoint id="np0" playOrder="0">\n' +
       '    <navLabel><text>' + escapeXml(title) + '</text></navLabel>\n' +
-      '    <content src="text/content.xhtml"/>\n' +
+      '    <content src="text/title.xhtml"/>\n' +
       '  </navPoint>\n';
     for (var t = 0; t < toc.length; t++) {
       ncxPoints += '  <navPoint id="np' + (t + 1) + '" playOrder="' + (t + 1) + '">\n' +
         '    <navLabel><text>' + escapeXml(toc[t].text) + '</text></navLabel>\n' +
-        '    <content src="text/content.xhtml#' + toc[t].id + '"/>\n' +
+        '    <content src="' + tocHref(toc[t]) + '"/>\n' +
         '  </navPoint>\n';
     }
 
@@ -1179,7 +1171,7 @@
       '  <manifest>\n' +
       '    <item id="cover" href="text/cover.xhtml" media-type="application/xhtml+xml"/>\n' +
       '    <item id="cover-image" href="images/' + coverFileName + '" media-type="' + coverMime + '" properties="cover-image"/>\n' +
-      '    <item id="content" href="text/content.xhtml" media-type="application/xhtml+xml"/>\n' +
+      chapterManifest +
       '    <item id="style" href="style.css" media-type="text/css"/>\n' +
       '    <item id="nav" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>\n' +
       '    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n' +
@@ -1187,7 +1179,7 @@
       '  </manifest>\n' +
       '  <spine page-progression-direction="rtl" toc="ncx">\n' +
       '    <itemref idref="cover" linear="no"/>\n' +
-      '    <itemref idref="content"/>\n' +
+      chapterSpine +
       '  </spine>\n' +
       '</package>';
     zip.file('OEBPS/content.opf', opf);
