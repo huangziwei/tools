@@ -593,6 +593,60 @@
     });
   }
 
+  function buildCoverSvg(title, author) {
+    var w = 1050, h = 1500;
+    var pad = 60;      // outer padding
+    var bw = 2;        // border width
+    var gap = 16;      // gap between double border lines
+    var bg = '#F2EBDA';
+    var border = '#8B9E78';
+    var fg = '#2C2418';
+    var muted = '#6B6256';
+
+    // Break title into lines if long (max ~8 chars per line for vertical feel)
+    var titleLines = [];
+    if (title.length <= 10) {
+      titleLines = [title];
+    } else if (title.length <= 20) {
+      var mid = Math.ceil(title.length / 2);
+      titleLines = [title.substring(0, mid), title.substring(mid)];
+    } else {
+      var third = Math.ceil(title.length / 3);
+      titleLines = [title.substring(0, third), title.substring(third, third * 2), title.substring(third * 2)];
+    }
+
+    var titleFontSize = title.length <= 8 ? 56 : title.length <= 14 ? 44 : 36;
+    var titleY = h * 0.38;
+    var titleSpacing = titleFontSize * 1.5;
+
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">\n';
+    // Background
+    svg += '<rect width="' + w + '" height="' + h + '" fill="' + bg + '"/>\n';
+    // Double border
+    svg += '<rect x="' + pad + '" y="' + pad + '" width="' + (w - pad * 2) + '" height="' + (h - pad * 2) + '" fill="none" stroke="' + border + '" stroke-width="' + bw + '"/>\n';
+    svg += '<rect x="' + (pad + gap) + '" y="' + (pad + gap) + '" width="' + (w - (pad + gap) * 2) + '" height="' + (h - (pad + gap) * 2) + '" fill="none" stroke="' + border + '" stroke-width="' + (bw * 0.5) + '"/>\n';
+
+    // Collection label top center
+    svg += '<text x="' + (w / 2) + '" y="' + (pad + gap + 48) + '" text-anchor="middle" font-family="\'Hiragino Mincho ProN\', \'Yu Mincho\', \'Noto Serif JP\', serif" font-size="22" letter-spacing="0.5em" fill="' + muted + '">青空文庫</text>\n';
+
+    // Title
+    for (var ti = 0; ti < titleLines.length; ti++) {
+      var ly = titleY + ti * titleSpacing;
+      svg += '<text x="' + (w / 2) + '" y="' + ly + '" text-anchor="middle" font-family="\'Hiragino Mincho ProN\', \'Yu Mincho\', \'Noto Serif JP\', serif" font-size="' + titleFontSize + '" fill="' + fg + '">' + escapeXml(titleLines[ti]) + '</text>\n';
+    }
+
+    // Author below title
+    var authorY = titleY + titleLines.length * titleSpacing + 20;
+    svg += '<text x="' + (w / 2) + '" y="' + authorY + '" text-anchor="middle" font-family="\'Hiragino Mincho ProN\', \'Yu Mincho\', \'Noto Serif JP\', serif" font-size="26" fill="' + muted + '">' + escapeXml(author) + '</text>\n';
+
+    // Small decorative divider — simple thin line
+    var divY = authorY + 40;
+    svg += '<line x1="' + (w / 2 - 40) + '" y1="' + divY + '" x2="' + (w / 2 + 40) + '" y2="' + divY + '" stroke="' + border + '" stroke-width="1"/>\n';
+
+    svg += '</svg>';
+    return svg;
+  }
+
   function buildEpub(title, author, bodyXhtml, images, toc, colophon) {
     var zip = new JSZip();
     var uuid = generateUUID();
@@ -638,6 +692,21 @@
       '.colophon { margin-top: 3em; font-size: 0.85em; }\n' +
       '.colophon p { text-indent: 0; margin: 0.2em 0; }\n';
     zip.file('OEBPS/style.css', css);
+
+    // Cover
+    var coverSvg = buildCoverSvg(title, author);
+    zip.file('OEBPS/images/cover.svg', coverSvg);
+
+    var coverXhtml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<!DOCTYPE html>\n' +
+      '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ja">\n' +
+      '<head><meta charset="UTF-8"/><title>Cover</title>\n' +
+      '<style>body { margin: 0; padding: 0; text-align: center; } img { max-width: 100%; max-height: 100%; }</style>\n' +
+      '</head>\n' +
+      '<body epub:type="cover"><img src="../images/cover.svg" alt="Cover"/></body>\n' +
+      '</html>';
+    zip.file('OEBPS/text/cover.xhtml', coverXhtml);
 
     // Content XHTML
     var contentXhtml =
@@ -780,6 +849,8 @@
       '    <meta property="rendition:layout">reflowable</meta>\n' +
       '  </metadata>\n' +
       '  <manifest>\n' +
+      '    <item id="cover" href="text/cover.xhtml" media-type="application/xhtml+xml"/>\n' +
+      '    <item id="cover-image" href="images/cover.svg" media-type="image/svg+xml" properties="cover-image"/>\n' +
       '    <item id="content" href="text/content.xhtml" media-type="application/xhtml+xml"/>\n' +
       '    <item id="style" href="style.css" media-type="text/css"/>\n' +
       '    <item id="nav" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>\n' +
@@ -787,6 +858,7 @@
       imageManifest +
       '  </manifest>\n' +
       '  <spine page-progression-direction="rtl" toc="ncx">\n' +
+      '    <itemref idref="cover" linear="no"/>\n' +
       '    <itemref idref="content"/>\n' +
       '  </spine>\n' +
       '</package>';
