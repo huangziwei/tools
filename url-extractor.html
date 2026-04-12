@@ -406,6 +406,15 @@
     return null;
   }
 
+  // srcset contains comma-separated "url descriptor" pairs
+  var SRCSET_ATTRS = ['srcset', 'data-srcset', 'data-src-set'];
+
+  function parseSrcset(val) {
+    return val.split(',').map(function(entry) {
+      return entry.trim().split(/\s+/)[0];
+    }).filter(function(url) { return url && looksLikeUrl(url); });
+  }
+
   // Scan parsed doc for all attributes containing URL-like values
   function scanForUrls(doc) {
     var attrMap = new Map(); // attrName -> Set of unique values
@@ -415,9 +424,16 @@
       var el = all[i];
       for (var j = 0; j < el.attributes.length; j++) {
         var a = el.attributes[j];
-        if (!looksLikeUrl(a.value)) continue;
-        if (!attrMap.has(a.name)) attrMap.set(a.name, new Set());
-        attrMap.get(a.name).add(a.value);
+        if (SRCSET_ATTRS.indexOf(a.name) !== -1) {
+          var urls = parseSrcset(a.value);
+          if (urls.length === 0) continue;
+          if (!attrMap.has(a.name)) attrMap.set(a.name, new Set());
+          urls.forEach(function(url) { attrMap.get(a.name).add(url); });
+        } else {
+          if (!looksLikeUrl(a.value)) continue;
+          if (!attrMap.has(a.name)) attrMap.set(a.name, new Set());
+          attrMap.get(a.name).add(a.value);
+        }
       }
     }
 
