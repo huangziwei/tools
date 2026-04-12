@@ -258,6 +258,9 @@
     -webkit-text-emphasis: filled sesame;
     text-emphasis: filled sesame;
   }
+  .preview-inner .underline { text-decoration: underline; }
+  .preview-inner .gothic { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif; }
+  .preview-inner .yokogumi { writing-mode: horizontal-tb; }
   .preview-inner .colophon { margin-top: 3em; font-size: 0.85em; }
   .preview-inner .colophon p { text-indent: 0; margin: 0.2em 0; }
   .preview-inner h1 { text-indent: 0; }
@@ -472,6 +475,45 @@
         continue;
       }
 
+      // Block-level 横組み start/end
+      if (/［＃ここから横組み］/.test(raw)) {
+        html += '<div class="yokogumi">\n';
+        raw = raw.replace(/［＃ここから横組み］/, '');
+        if (!raw.trim()) continue;
+      }
+      if (/［＃ここで横組み終わり］/.test(raw)) {
+        raw = raw.replace(/［＃ここで横組み終わり］/, '');
+        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
+        html += '</div>\n';
+        continue;
+      }
+
+      // Block-level ゴシック体 start/end
+      if (/［＃ここからゴシック体］/.test(raw)) {
+        html += '<div class="gothic">\n';
+        raw = raw.replace(/［＃ここからゴシック体］/, '');
+        if (!raw.trim()) continue;
+      }
+      if (/［＃ここでゴシック体終わり］/.test(raw)) {
+        raw = raw.replace(/［＃ここでゴシック体終わり］/, '');
+        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
+        html += '</div>\n';
+        continue;
+      }
+
+      // Block-level 斜体 start/end
+      if (/［＃ここから斜体］/.test(raw)) {
+        html += '<div class="italic">\n';
+        raw = raw.replace(/［＃ここから斜体］/, '');
+        if (!raw.trim()) continue;
+      }
+      if (/［＃ここで斜体終わり］/.test(raw)) {
+        raw = raw.replace(/［＃ここで斜体終わり］/, '');
+        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
+        html += '</div>\n';
+        continue;
+      }
+
       // Page/section breaks: ［＃改ページ］ ［＃改丁］ ［＃ページの左右中央］
       if (/［＃(改ページ|改丁|ページの左右中央)］/.test(raw)) {
         indentLevel = 0;
@@ -549,30 +591,84 @@
       return '<ruby>' + base + '<rp>（</rp><rt>' + reading + '</rt><rp>）</rp></ruby>';
     });
 
+    // --- Block-form annotations (paired start/end) ---
+
     // Bouten: ［＃傍点］text［＃傍点終わり］
     s = s.replace(/［＃傍点］([^［]*)［＃傍点終わり］/g, function(_, text) {
       return '<em class="sesame">' + text + '</em>';
+    });
+
+    // Underline: ［＃傍線］text［＃傍線終わり］
+    s = s.replace(/［＃傍線］([^［]*)［＃傍線終わり］/g, function(_, text) {
+      return '<span class="underline">' + text + '</span>';
     });
 
     // Bold: ［＃太字］text［＃太字終わり］
     s = s.replace(/［＃太字］([^［]*)［＃太字終わり］/g, function(_, text) {
       return '<strong>' + text + '</strong>';
     });
-    // Postfix bold: ［＃「text」は太字］— wraps the nearest preceding occurrence of text
-    var boldTargets = [];
-    s = s.replace(/［＃「([^」]+)」は太字］/g, function(_, text) {
-      boldTargets.push(text);
+
+    // Gothic: ［＃ゴシック体］text［＃ゴシック体終わり］
+    s = s.replace(/［＃ゴシック体］([^［]*)［＃ゴシック体終わり］/g, function(_, text) {
+      return '<span class="gothic">' + text + '</span>';
+    });
+
+    // Italic: ［＃斜体］text［＃斜体終わり］
+    s = s.replace(/［＃斜体］([^［]*)［＃斜体終わり］/g, function(_, text) {
+      return '<i>' + text + '</i>';
+    });
+
+    // Horizontal text (yokogumi) inline: ［＃横組み］text［＃横組み終わり］
+    s = s.replace(/［＃横組み］([^［]*)［＃横組み終わり］/g, function(_, text) {
+      return '<span class="yokogumi">' + text + '</span>';
+    });
+
+    // Font size: ［＃N段階大きな文字］text［＃大きな文字終わり］
+    s = s.replace(/［＃([０-９0-9]+)段階大きな文字］([^［]*)［＃大きな文字終わり］/g, function(_, n, text) {
+      var level = parseInt(n.replace(/[０-９]/g, function(c) { return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48); }));
+      var em = 1 + level * 0.2;
+      return '<span style="font-size:' + em + 'em">' + text + '</span>';
+    });
+    // ［＃N段階小さな文字］text［＃小さな文字終わり］
+    s = s.replace(/［＃([０-９0-9]+)段階小さな文字］([^［]*)［＃小さな文字終わり］/g, function(_, n, text) {
+      var level = parseInt(n.replace(/[０-９]/g, function(c) { return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48); }));
+      var em = Math.max(0.6, 1 - level * 0.1);
+      return '<span style="font-size:' + em + 'em">' + text + '</span>';
+    });
+
+    // --- Postfix annotations: ［＃「text」にXXX］ ---
+    // Collect and apply all postfix annotations in one pass
+    var postfixTargets = [];
+    s = s.replace(/［＃「([^」]+)」に傍点］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'em class="sesame"', close: 'em' });
       return '';
     });
-    for (var bi = 0; bi < boldTargets.length; bi++) {
-      var bt = boldTargets[bi];
-      var escaped = bt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Replace last occurrence not already wrapped
-      var idx = s.lastIndexOf(bt);
+    s = s.replace(/［＃「([^」]+)」に傍線］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'span class="underline"', close: 'span' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」は太字］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'strong', close: 'strong' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」はゴシック体］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'span class="gothic"', close: 'span' });
+      return '';
+    });
+    s = s.replace(/［＃「([^」]+)」は斜体］/g, function(_, text) {
+      postfixTargets.push({ text: text, tag: 'i', close: 'i' });
+      return '';
+    });
+    // Apply postfix targets — wrap last occurrence of each text
+    for (var pi = 0; pi < postfixTargets.length; pi++) {
+      var pt = postfixTargets[pi];
+      var idx = s.lastIndexOf(pt.text);
       if (idx !== -1) {
-        s = s.substring(0, idx) + '<strong>' + bt + '</strong>' + s.substring(idx + bt.length);
+        s = s.substring(0, idx) + '<' + pt.tag + '>' + pt.text + '</' + pt.close + '>' + s.substring(idx + pt.text.length);
       }
     }
+
+    // --- Other inline annotations ---
 
     // Inline notes: ［＃割り注］text［＃割り注終わり］
     s = s.replace(/［＃割り注］([^［]*)［＃割り注終わり］/g, function(_, text) {
@@ -817,6 +913,10 @@
       'rt { font-size: 0.55em; }\n' +
       'p.indent { margin-inline-start: 1em; text-indent: 0; }\n' +
       'img { max-width: 100%; max-height: 100%; }\n' +
+      '.underline { text-decoration: underline; }\n' +
+      '.gothic { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif; }\n' +
+      '.italic { font-style: italic; }\n' +
+      '.yokogumi { writing-mode: horizontal-tb; -webkit-writing-mode: horizontal-tb; -epub-writing-mode: horizontal-tb; }\n' +
       '.colophon { margin-top: 3em; font-size: 0.85em; }\n' +
       '.colophon p { text-indent: 0; margin: 0.2em 0; }\n';
     zip.file('OEBPS/style.css', css);
