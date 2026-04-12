@@ -102,25 +102,6 @@
 
   .section { margin-top: 1.5rem; }
 
-  .row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-
-  .btn-row { margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
-
-  .btn-primary {
-    padding: 0.6rem 1.4rem;
-    font-size: 0.9rem;
-    font-family: inherit;
-    font-weight: 500;
-    border: none;
-    border-radius: 8px;
-    background: var(--accent);
-    color: #fff;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .btn-primary:hover { background: var(--accent-hover); }
-  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-
   .btn-secondary {
     padding: 0.5rem 1rem;
     font-size: 0.85rem;
@@ -135,27 +116,81 @@
   }
   .btn-secondary:hover { border-color: var(--accent); }
 
-  .preset-row {
+  .drop-zone {
+    border: 2px dashed var(--border-strong);
+    border-radius: 10px;
+    padding: 0.75rem;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .drop-zone.has-data {
+    border-style: solid;
+    border-color: var(--border);
+  }
+  .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .drop-zone textarea {
+    border: none;
+    background: transparent;
+    padding: 0;
+    resize: none;
+    cursor: default;
+  }
+  .drop-zone textarea:focus { box-shadow: none; }
+  .drop-zone textarea::placeholder {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 0.9rem;
+  }
+  .drop-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .attr-chips {
     display: flex;
     gap: 0.4rem;
     flex-wrap: wrap;
-    margin-top: 0.5rem;
   }
-  .preset-btn {
-    padding: 0.3rem 0.7rem;
-    font-size: 0.78rem;
+  .attr-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82rem;
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-    font-weight: 400;
     border: 1px solid var(--border);
-    border-radius: 5px;
+    border-radius: 6px;
     background: var(--code-bg);
     color: var(--fg);
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
   }
-  .preset-btn:hover {
+  .attr-chip:hover {
     border-color: var(--accent);
     background: var(--panel-active);
+  }
+  .attr-chip.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+  .attr-chip .chip-count {
+    font-size: 0.72rem;
+    opacity: 0.7;
+  }
+
+  .scan-empty {
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-style: italic;
+  }
+
+  .help-text {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
   }
 
   .results-area {
@@ -204,46 +239,6 @@
     font-size: 0.9rem;
   }
 
-  .drop-zone {
-    border: 2px dashed var(--border-strong);
-    border-radius: 10px;
-    padding: 0.75rem;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  .drop-zone.has-data {
-    border-style: solid;
-    border-color: var(--border);
-  }
-  .drop-zone.drag-over {
-    border-color: var(--accent);
-    background: var(--panel-active);
-  }
-  .drop-zone textarea {
-    border: none;
-    background: transparent;
-    padding: 0;
-    resize: none;
-    cursor: default;
-  }
-  .drop-zone textarea:focus {
-    box-shadow: none;
-  }
-  .drop-zone textarea::placeholder {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    font-size: 0.9rem;
-  }
-  .drop-actions {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-  }
-
-  .help-text {
-    margin-top: 0.4rem;
-    font-size: 0.8rem;
-    color: var(--muted);
-  }
-
   footer {
     margin-top: 2.5rem;
     color: var(--muted);
@@ -255,7 +250,7 @@
 <body>
 <main>
   <h1>URL Extractor</h1>
-  <p class="lead">Paste page source to extract URLs by CSS selector and attribute. Everything runs in your browser.</p>
+  <p class="lead">Paste page source to extract URLs. Everything runs in your browser.</p>
 
   <div>
     <label class="field-label" for="htmlInput">HTML source</label>
@@ -269,34 +264,15 @@
     </div>
   </div>
 
-  <div class="section">
-    <label class="field-label" for="selectorInput">CSS selector</label>
-    <input type="text" id="selectorInput" placeholder="e.g. [data-mp3], a[href], img[src]">
-    <div class="preset-row">
-      <button class="preset-btn" data-selector="a[href]" data-attr="href">a[href]</button>
-      <button class="preset-btn" data-selector="img[src]" data-attr="src">img[src]</button>
-      <button class="preset-btn" data-selector="[data-mp3]" data-attr="data-mp3">data-mp3</button>
-      <button class="preset-btn" data-selector="audio source[src]" data-attr="src">audio src</button>
-      <button class="preset-btn" data-selector="video source[src]" data-attr="src">video src</button>
-      <button class="preset-btn" data-selector="link[href]" data-attr="href">link[href]</button>
-      <button class="preset-btn" data-selector="script[src]" data-attr="src">script[src]</button>
-    </div>
+  <div class="section" id="attrsSection" style="display:none">
+    <label class="field-label">Found in source</label>
+    <div class="attr-chips" id="attrChips"></div>
   </div>
 
-  <div class="section">
-    <label class="field-label" for="attrInput">Attribute to extract</label>
-    <input type="text" id="attrInput" placeholder="e.g. href, src, data-mp3">
-    <p class="help-text">Leave empty to extract text content instead.</p>
-  </div>
-
-  <div class="section">
-    <label class="field-label" for="filterInput">Filter results (optional)</label>
+  <div class="section" id="filterSection" style="display:none">
+    <label class="field-label" for="filterInput">Filter results</label>
     <input type="text" id="filterInput" placeholder="e.g. .mp3, .jpg, https://cdn">
     <p class="help-text">Only show results containing this substring.</p>
-  </div>
-
-  <div class="btn-row">
-    <button class="btn-primary" id="extractBtn">Extract</button>
   </div>
 
   <div class="results-area" id="resultsArea" style="display:none">
@@ -304,9 +280,7 @@
       <span>Results</span>
       <span class="results-count" id="resultsCount"></span>
     </div>
-    <div id="resultsBody">
-      <ul class="results-list" id="resultsList"></ul>
-    </div>
+    <ul class="results-list" id="resultsList"></ul>
     <div style="padding: 0.5rem 0.85rem; border-top: 1px solid var(--border);">
       <button class="btn-secondary" id="copyAllBtn">Copy all</button>
     </div>
@@ -323,22 +297,116 @@
   var fileInput = document.getElementById('fileInput');
   var browseBtn = document.getElementById('browseBtn');
   var clearHtmlBtn = document.getElementById('clearHtmlBtn');
-  var selectorInput = document.getElementById('selectorInput');
-  var attrInput = document.getElementById('attrInput');
+  var attrsSection = document.getElementById('attrsSection');
+  var attrChips = document.getElementById('attrChips');
+  var filterSection = document.getElementById('filterSection');
   var filterInput = document.getElementById('filterInput');
-  var extractBtn = document.getElementById('extractBtn');
   var resultsArea = document.getElementById('resultsArea');
   var resultsCount = document.getElementById('resultsCount');
   var resultsList = document.getElementById('resultsList');
   var copyAllBtn = document.getElementById('copyAllBtn');
 
   var rawHtml = '';
+  var parsedDoc = null;
+  var scannedAttrs = []; // [{attr, selector, count, values}]
+  var activeAttr = null;
   var currentResults = [];
 
   function formatSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function looksLikeUrl(val) {
+    if (/^https?:\/\//.test(val)) return true;
+    if (/^\/\//.test(val)) return true;
+    if (/^data:/.test(val)) return true;
+    if (/\.[a-z0-9]{2,5}(\?|#|$)/i.test(val) && /\//.test(val)) return true;
+    return false;
+  }
+
+  // Scan parsed doc for all attributes containing URL-like values
+  function scanForUrls(doc) {
+    var attrMap = new Map(); // attrName -> Set of unique values
+
+    var all = doc.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      for (var j = 0; j < el.attributes.length; j++) {
+        var a = el.attributes[j];
+        if (!looksLikeUrl(a.value)) continue;
+        if (!attrMap.has(a.name)) attrMap.set(a.name, new Set());
+        attrMap.get(a.name).add(a.value);
+      }
+    }
+
+    var results = [];
+    attrMap.forEach(function(values, attr) {
+      results.push({
+        attr: attr,
+        selector: '[' + attr + ']',
+        count: values.size,
+        values: Array.from(values)
+      });
+    });
+
+    // Sort: most unique URLs first
+    results.sort(function(a, b) { return b.count - a.count; });
+    return results;
+  }
+
+  function renderChips() {
+    attrChips.innerHTML = '';
+    if (scannedAttrs.length === 0) {
+      var span = document.createElement('span');
+      span.className = 'scan-empty';
+      span.textContent = 'No URL-like attributes found.';
+      attrChips.appendChild(span);
+      return;
+    }
+
+    scannedAttrs.forEach(function(entry) {
+      var btn = document.createElement('button');
+      btn.className = 'attr-chip' + (activeAttr === entry.attr ? ' active' : '');
+      btn.innerHTML = entry.attr + ' <span class="chip-count">(' + entry.count + ')</span>';
+      btn.dataset.attr = entry.attr;
+      attrChips.appendChild(btn);
+    });
+  }
+
+  function showResults(values) {
+    var filter = filterInput.value.trim().toLowerCase();
+    var filtered = filter
+      ? values.filter(function(v) { return v.toLowerCase().indexOf(filter) !== -1; })
+      : values;
+
+    currentResults = filtered;
+    resultsList.innerHTML = '';
+
+    if (filtered.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = filter ? 'No results match filter.' : 'No matches found.';
+      resultsList.appendChild(empty);
+    } else {
+      filtered.forEach(function(val) {
+        var li = document.createElement('li');
+        li.textContent = val;
+        resultsList.appendChild(li);
+      });
+    }
+
+    resultsCount.textContent = filtered.length + ' found';
+    resultsArea.style.display = '';
+    filterSection.style.display = '';
+  }
+
+  function selectAttr(attrName) {
+    activeAttr = attrName;
+    renderChips();
+    var entry = scannedAttrs.find(function(e) { return e.attr === attrName; });
+    if (entry) showResults(entry.values);
   }
 
   function setHtmlData(text) {
@@ -348,24 +416,40 @@
     htmlInput.value = '[Pasted ' + lines.toLocaleString() + ' lines \u00b7 ' + formatSize(size) + ']';
     dropZone.classList.add('has-data');
     clearHtmlBtn.style.display = '';
+
+    // Parse and scan
+    var parser = new DOMParser();
+    parsedDoc = parser.parseFromString(rawHtml, 'text/html');
+    scannedAttrs = scanForUrls(parsedDoc);
+    activeAttr = null;
+    attrsSection.style.display = '';
+    resultsArea.style.display = 'none';
+    filterSection.style.display = 'none';
+    filterInput.value = '';
+    renderChips();
   }
 
   function clearHtmlData() {
     rawHtml = '';
+    parsedDoc = null;
+    scannedAttrs = [];
+    activeAttr = null;
+    currentResults = [];
     htmlInput.value = '';
     dropZone.classList.remove('has-data');
     clearHtmlBtn.style.display = 'none';
+    attrsSection.style.display = 'none';
+    filterSection.style.display = 'none';
     resultsArea.style.display = 'none';
+    filterInput.value = '';
   }
 
-  // Intercept paste — store raw text, show summary
+  // Intercept paste
   htmlInput.addEventListener('paste', function(e) {
     e.preventDefault();
     var text = (e.clipboardData || window.clipboardData).getData('text');
     if (text) setHtmlData(text);
   });
-
-  // Make textarea focusable for paste despite readonly
   htmlInput.addEventListener('click', function() { htmlInput.focus(); });
 
   // File browse
@@ -378,7 +462,7 @@
     reader.readAsText(file);
   });
 
-  // File drag-and-drop
+  // Drag-and-drop
   ['dragenter', 'dragover'].forEach(function(name) {
     dropZone.addEventListener(name, function(e) {
       e.preventDefault();
@@ -404,83 +488,21 @@
 
   clearHtmlBtn.addEventListener('click', clearHtmlData);
 
-  // Preset buttons
-  document.querySelector('.preset-row').addEventListener('click', function(e) {
-    var btn = e.target.closest('.preset-btn');
+  // Chip click
+  attrChips.addEventListener('click', function(e) {
+    var btn = e.target.closest('.attr-chip');
     if (!btn) return;
-    selectorInput.value = btn.dataset.selector;
-    attrInput.value = btn.dataset.attr;
+    selectAttr(btn.dataset.attr);
   });
 
-  extractBtn.addEventListener('click', extract);
-
-  // Ctrl/Cmd+Enter to extract
-  document.addEventListener('keydown', function(e) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault();
-      extract();
-    }
+  // Filter re-applies to current selection
+  filterInput.addEventListener('input', function() {
+    if (!activeAttr) return;
+    var entry = scannedAttrs.find(function(e) { return e.attr === activeAttr; });
+    if (entry) showResults(entry.values);
   });
 
-  function extract() {
-    if (!rawHtml) return;
-    var selector = selectorInput.value.trim();
-    var attr = attrInput.value.trim();
-    var filter = filterInput.value.trim().toLowerCase();
-
-    if (!selector) {
-      selectorInput.focus();
-      return;
-    }
-
-    var parser = new DOMParser();
-    var doc = parser.parseFromString(rawHtml, 'text/html');
-
-    var elements;
-    try {
-      elements = doc.querySelectorAll(selector);
-    } catch (e) {
-      resultsList.innerHTML = '';
-      var li = document.createElement('li');
-      li.textContent = 'Invalid CSS selector: ' + e.message;
-      li.style.color = '#ef4444';
-      resultsList.appendChild(li);
-      resultsArea.style.display = '';
-      resultsCount.textContent = 'error';
-      return;
-    }
-
-    var values = [];
-    var seen = new Set();
-    for (var i = 0; i < elements.length; i++) {
-      var val = attr ? elements[i].getAttribute(attr) : elements[i].textContent.trim();
-      if (!val) continue;
-      if (seen.has(val)) continue;
-      seen.add(val);
-      if (filter && val.toLowerCase().indexOf(filter) === -1) continue;
-      values.push(val);
-    }
-
-    currentResults = values;
-    resultsList.innerHTML = '';
-
-    if (values.length === 0) {
-      var empty = document.createElement('div');
-      empty.className = 'empty-state';
-      empty.textContent = 'No matches found.';
-      resultsList.appendChild(empty);
-    } else {
-      values.forEach(function(val) {
-        var li = document.createElement('li');
-        li.textContent = val;
-        resultsList.appendChild(li);
-      });
-    }
-
-    resultsCount.textContent = values.length + ' found';
-    resultsArea.style.display = '';
-  }
-
+  // Copy all
   copyAllBtn.addEventListener('click', function() {
     if (!currentResults.length) return;
     navigator.clipboard.writeText(currentResults.join('\n')).then(function() {
