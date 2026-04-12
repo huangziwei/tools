@@ -572,10 +572,12 @@
     const mX = qrOffX + qzPx;
     const mY = qrOffY + qzPx;
 
-    // Logo zone calculation
+    // Logo zone calculation — clear area includes padding around the logo
+    // so no dots overlap the white background behind the logo
     const logoZoneFrac = 0.28;
-    const logoZoneStart = Math.floor(moduleCount * (0.5 - logoZoneFrac / 2));
-    const logoZoneEnd = Math.ceil(moduleCount * (0.5 + logoZoneFrac / 2));
+    const logoPadModules = 1;
+    const logoZoneStart = Math.floor(moduleCount * (0.5 - logoZoneFrac / 2)) - logoPadModules;
+    const logoZoneEnd = Math.ceil(moduleCount * (0.5 + logoZoneFrac / 2)) + logoPadModules;
 
     for (let row = 0; row < moduleCount; row++) {
       for (let col = 0; col < moduleCount; col++) {
