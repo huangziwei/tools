@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aozora to EPUB</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111418;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --border-strong: #cbd5e1;
+    --panel: #f8fafc;
+    --panel-active: #eff6ff;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #f1f5f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eaed;
+      --muted: #9aa0a6;
+      --border: #262a30;
+      --border-strong: #3a3f47;
+      --panel: #14171c;
+      --panel-active: #17253f;
+      --accent: #60a5fa;
+      --accent-hover: #93c5fd;
+      --code-bg: #1a1f26;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 2rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 620px; }
+
+  h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 0.25rem; }
+  .lead { color: var(--muted); margin: 0 0 1.75rem; font-size: 0.95rem; }
+
+  .field-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+  }
+
+  .btn-secondary {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  .btn-primary {
+    padding: 0.6rem 1.5rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.4; cursor: default; }
+
+  .drop-zone {
+    border: 2px dashed var(--border-strong);
+    border-radius: 10px;
+    padding: 0.75rem;
+    transition: border-color 0.15s, background 0.15s;
+    cursor: pointer;
+  }
+  .drop-zone.has-data {
+    border-style: solid;
+    border-color: var(--border);
+    cursor: default;
+  }
+  .drop-zone:not(.has-data):hover {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .drop-zone-label {
+    display: block;
+    padding: 1.5rem 1rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+    pointer-events: none;
+  }
+  .drop-zone.has-data .drop-zone-label { display: none; }
+  .drop-zone-info {
+    display: none;
+    padding: 0.5rem 0;
+    font-size: 0.85rem;
+    color: var(--fg);
+  }
+  .drop-zone.has-data .drop-zone-info { display: block; }
+  .drop-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .meta-fields {
+    display: none;
+    margin-top: 1.5rem;
+  }
+  .meta-fields.visible { display: block; }
+  .meta-fields input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    margin-bottom: 0.75rem;
+    transition: border-color 0.15s;
+  }
+  .meta-fields input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .action-row {
+    display: none;
+    margin-top: 1.5rem;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .action-row.visible { display: flex; }
+
+  .status {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    display: none;
+  }
+  .status.visible { display: block; }
+  .status.error { color: #ef4444; }
+
+  .preview {
+    display: none;
+    margin-top: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .preview.visible { display: block; }
+  .preview-header {
+    padding: 0.5rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .preview-body {
+    padding: 1rem;
+    font-size: 0.85rem;
+    max-height: 300px;
+    overflow-y: auto;
+    line-height: 1.7;
+    font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  }
+  .preview-body rt { font-size: 0.55em; }
+
+  footer {
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(120%);
+    background: var(--fg);
+    color: var(--bg);
+    padding: 0.55rem 1.1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    opacity: 0;
+    transition: transform 0.25s, opacity 0.25s;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Aozora to EPUB</h1>
+  <p class="lead">Convert Aozora Bunko files to vertical-layout EPUB. Everything runs in your browser.</p>
+
+  <div>
+    <label class="field-label">Aozora file</label>
+    <div class="drop-zone" id="dropZone">
+      <span class="drop-zone-label">Drop .html, .txt, or .zip here &mdash; or click to browse</span>
+      <div class="drop-zone-info" id="fileInfo"></div>
+      <input type="file" id="fileInput" accept=".html,.htm,.txt,.zip" style="display:none">
+      <div class="drop-actions">
+        <button class="btn-secondary" id="clearBtn" style="display:none">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="meta-fields" id="metaFields">
+    <label class="field-label" for="titleInput">Title</label>
+    <input type="text" id="titleInput" placeholder="Book title">
+    <label class="field-label" for="authorInput">Author</label>
+    <input type="text" id="authorInput" placeholder="Author name">
+  </div>
+
+  <div class="action-row" id="actionRow">
+    <button class="btn-primary" id="convertBtn">Download EPUB</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="preview" id="preview">
+    <div class="preview-header">Preview</div>
+    <div class="preview-body" id="previewBody"></div>
+  </div>
+
+  <footer>
+    <!-- TOOL_META_START --><!-- TOOL_META_END -->
+  </footer>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+  var dropZone = document.getElementById('dropZone');
+  var fileInput = document.getElementById('fileInput');
+  var fileInfo = document.getElementById('fileInfo');
+  var clearBtn = document.getElementById('clearBtn');
+  var metaFields = document.getElementById('metaFields');
+  var titleInput = document.getElementById('titleInput');
+  var authorInput = document.getElementById('authorInput');
+  var actionRow = document.getElementById('actionRow');
+  var convertBtn = document.getElementById('convertBtn');
+  var statusEl = document.getElementById('status');
+  var preview = document.getElementById('preview');
+  var previewBody = document.getElementById('previewBody');
+  var toast = document.getElementById('toast');
+
+  // Parsed state
+  var bookTitle = '';
+  var bookAuthor = '';
+  var bodyXhtml = '';   // inner XHTML of main content
+  var images = [];      // [{name, data (Uint8Array), mime}]
+
+  // --- Decoding ---
+
+  function decodeShiftJIS(buf) {
+    try {
+      return new TextDecoder('shift_jis').decode(buf);
+    } catch (e) {
+      return new TextDecoder('utf-8').decode(buf);
+    }
+  }
+
+  function detectAndDecode(buf) {
+    var bytes = new Uint8Array(buf);
+    // BOM check
+    if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF)
+      return new TextDecoder('utf-8').decode(buf);
+    // Try UTF-8 first — if it has encoding errors, fall back to Shift-JIS
+    var utf8 = new TextDecoder('utf-8', { fatal: true });
+    try {
+      return utf8.decode(buf);
+    } catch (e) {
+      return decodeShiftJIS(buf);
+    }
+  }
+
+  // --- Aozora TXT parser ---
+
+  // Image filenames referenced by ［＃...（filename）入る］— collected during parse
+  var referencedImages = [];
+
+  function parseTxt(text) {
+    referencedImages = [];
+    var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+
+    // First non-empty line = title, second = author
+    var headerLines = [];
+    var i = 0;
+    for (; i < lines.length && headerLines.length < 2; i++) {
+      var l = lines[i].trim();
+      if (l) headerLines.push(l);
+    }
+    var title = headerLines[0] || '';
+    var author = headerLines[1] || '';
+
+    // Skip to last separator line (end of header block)
+    var bodyStart = 0;
+    for (var j = 0; j < lines.length; j++) {
+      if (/^-{5,}/.test(lines[j].trim())) {
+        bodyStart = j + 1;
+      }
+    }
+    // Find trailing bibliographical section
+    var bodyEnd = lines.length;
+    for (var k = lines.length - 1; k > bodyStart; k--) {
+      if (/^底本[：:]/.test(lines[k].trim())) {
+        bodyEnd = k;
+        break;
+      }
+    }
+
+    var bodyLines = lines.slice(bodyStart, bodyEnd);
+    while (bodyLines.length && !bodyLines[0].trim()) bodyLines.shift();
+    while (bodyLines.length && !bodyLines[bodyLines.length - 1].trim()) bodyLines.pop();
+
+    // Multi-line state
+    var inBlockquote = false;
+    var html = '';
+
+    for (var n = 0; n < bodyLines.length; n++) {
+      var raw = bodyLines[n];
+
+      // Block indent start/end
+      if (/［＃ここから[０-９0-9]+字下げ］/.test(raw)) {
+        html += '<blockquote>';
+        inBlockquote = true;
+        raw = raw.replace(/［＃ここから[０-９0-9]+字下げ］/, '');
+        if (!raw.trim()) continue;
+      }
+      if (/［＃ここで字下げ終わり］/.test(raw)) {
+        raw = raw.replace(/［＃ここで字下げ終わり］/, '');
+        if (raw.trim()) html += '<p>' + convertAozoraLine(raw) + '</p>\n';
+        if (inBlockquote) { html += '</blockquote>'; inBlockquote = false; }
+        continue;
+      }
+
+      // Page/section breaks: ［＃改ページ］ ［＃改丁］ ［＃ページの左右中央］
+      if (/^［＃(改ページ|改丁|ページの左右中央)］\s*$/.test(raw.trim())) continue;
+      // Inline page break within line
+      raw = raw.replace(/［＃(改ページ|改丁|ページの左右中央)］/g, '');
+
+      // Headings: ［＃大見出し］text［＃大見出し終わり］
+      var headingMatch = raw.match(/［＃大見出し］(.+?)［＃大見出し終わり］/);
+      if (headingMatch) {
+        var hText = headingMatch[1].replace(/［＃[^］]*］/g, '');
+        html += '<h2>' + convertAozoraLine(hText) + '</h2>\n';
+        continue;
+      }
+      headingMatch = raw.match(/［＃中見出し］(.+?)［＃中見出し終わり］/);
+      if (headingMatch) {
+        var hText = headingMatch[1].replace(/［＃「[^」]*」は底本では[^］]*］/g, '');
+        html += '<h3>' + convertAozoraLine(hText) + '</h3>\n';
+        continue;
+      }
+      headingMatch = raw.match(/［＃小見出し］(.+?)［＃小見出し終わり］/);
+      if (headingMatch) {
+        html += '<h4>' + convertAozoraLine(headingMatch[1]) + '</h4>\n';
+        continue;
+      }
+
+      // Indentation prefix: ［＃N字下げ］ (single line)
+      raw = raw.replace(/［＃[０-９0-9]+字下げ］/g, '');
+
+      // Empty line → break
+      if (!raw.trim()) {
+        html += '<p><br/></p>\n';
+        continue;
+      }
+
+      html += '<p>' + convertAozoraLine(raw) + '</p>\n';
+    }
+
+    if (inBlockquote) html += '</blockquote>';
+
+    return { title: title, author: author, body: html };
+  }
+
+  function escapeXml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  }
+
+  function convertAozoraLine(line) {
+    var s = escapeXml(line);
+
+    // Images: ［＃description（filename、dimensions）入る］
+    s = s.replace(/［＃([^（］]*)（([^、]+)、[^）]*）入る］/g, function(_, alt, filename) {
+      referencedImages.push(filename);
+      return '<img src="../images/' + filename + '" alt="' + alt.trim() + '"/>';
+    });
+
+    // Ruby: ｜base《reading》
+    s = s.replace(/｜([^《]+?)《([^》]+)》/g, function(_, base, reading) {
+      return '<ruby>' + base + '<rp>（</rp><rt>' + reading + '</rt><rp>）</rp></ruby>';
+    });
+    // Ruby: kanji《reading》 (no ｜ marker)
+    s = s.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]+)《([^》]+)》/g, function(_, base, reading) {
+      return '<ruby>' + base + '<rp>（</rp><rt>' + reading + '</rt><rp>）</rp></ruby>';
+    });
+
+    // Bouten: ［＃傍点］text［＃傍点終わり］
+    s = s.replace(/［＃傍点］([^［]*)［＃傍点終わり］/g, function(_, text) {
+      return '<em class="sesame">' + text + '</em>';
+    });
+
+    // Bold: ［＃太字］text［＃太字終わり］
+    s = s.replace(/［＃太字］([^［]*)［＃太字終わり］/g, function(_, text) {
+      return '<strong>' + text + '</strong>';
+    });
+    // Postfix bold: ［＃「text」は太字］
+    s = s.replace(/「([^」]+)」[\s\S]*?［＃「[^」]*」は太字］/g, function(m) {
+      var inner = m.match(/「([^」]+)」/);
+      return '<strong>' + (inner ? inner[1] : '') + '</strong>';
+    });
+
+    // Inline notes: ［＃割り注］text［＃割り注終わり］
+    s = s.replace(/［＃割り注］([^［]*)［＃割り注終わり］/g, function(_, text) {
+      return '<small>（' + text + '）</small>';
+    });
+
+    // Gaiji: ※［＃description、code］→ keep ※ as placeholder
+    s = s.replace(/※［＃[^］]*］/g, '※');
+
+    // Named special chars
+    s = s.replace(/［＃感嘆符疑問符、[^\]]*］/g, '\u2049');
+    s = s.replace(/［＃感嘆符二つ、[^\]]*］/g, '\u203C');
+    s = s.replace(/［＃濁点付き片仮名ワ、[^\]]*］/g, '\u30F7');
+    s = s.replace(/［＃アレフ、[^\]]*］/g, '\u05D0');
+
+    // Strip editorial notes: ［＃「…」は底本では…］
+    s = s.replace(/［＃「[^」]*」は底本では[^］]*］/g, '');
+    // Heading refs already consumed at line level
+    s = s.replace(/［＃「[^」]*」は[大中小]見出し］/g, '');
+
+    // Remove remaining ［＃...］
+    s = s.replace(/［＃[^］]*］/g, '');
+
+    return s;
+  }
+
+  // --- Aozora XHTML parser ---
+
+  function parseXhtml(text) {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(text, 'text/html');
+
+    // Extract metadata
+    var titleMeta = doc.querySelector('meta[name="DC.Title"]');
+    var authorMeta = doc.querySelector('meta[name="DC.Creator"]');
+    var title = titleMeta ? titleMeta.getAttribute('content') : '';
+    var author = authorMeta ? authorMeta.getAttribute('content') : '';
+
+    // Fallback to visible header
+    if (!title) {
+      var h1 = doc.querySelector('.title, h1');
+      if (h1) title = h1.textContent.trim();
+    }
+    if (!author) {
+      var h2 = doc.querySelector('.author, h2');
+      if (h2) author = h2.textContent.trim();
+    }
+
+    // Extract main text
+    var mainText = doc.querySelector('.main_text, #main_text');
+    if (!mainText) mainText = doc.querySelector('body');
+
+    // Convert to paragraphs
+    var html = mainText.innerHTML;
+    // Aozora XHTML uses <br />\n for line breaks — convert to <p> blocks
+    html = html.replace(/\r\n/g, '\n');
+    // Split on <br> sequences
+    var parts = html.split(/<br\s*\/?>\s*/gi).filter(function(p) {
+      return p.trim().length > 0;
+    });
+    var body = parts.map(function(p) {
+      return '<p>' + p.trim() + '</p>';
+    }).join('\n');
+
+    // Map sesame_dot class to our class
+    body = body.replace(/class="sesame_dot"/g, 'class="sesame"');
+
+    return { title: title, author: author, body: body };
+  }
+
+  // --- EPUB generation ---
+
+  function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  function buildEpub(title, author, bodyXhtml, images) {
+    var zip = new JSZip();
+    var uuid = generateUUID();
+
+    // mimetype must be first, uncompressed
+    zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+
+    // container.xml
+    zip.file('META-INF/container.xml',
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n' +
+      '  <rootfiles>\n' +
+      '    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>\n' +
+      '  </rootfiles>\n' +
+      '</container>'
+    );
+
+    // Style
+    var css =
+      '@charset "utf-8";\n' +
+      'body {\n' +
+      '  writing-mode: vertical-rl;\n' +
+      '  -webkit-writing-mode: vertical-rl;\n' +
+      '  -epub-writing-mode: vertical-rl;\n' +
+      '  font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;\n' +
+      '  line-height: 1.8;\n' +
+      '  margin: 1.5em;\n' +
+      '  text-align: justify;\n' +
+      '}\n' +
+      'p {\n' +
+      '  text-indent: 1em;\n' +
+      '  margin: 0;\n' +
+      '}\n' +
+      'em.sesame {\n' +
+      '  font-style: normal;\n' +
+      '  -webkit-text-emphasis: filled sesame;\n' +
+      '  text-emphasis: filled sesame;\n' +
+      '}\n' +
+      'rt { font-size: 0.55em; }\n' +
+      'img { max-width: 100%; max-height: 100%; }\n';
+    zip.file('OEBPS/style.css', css);
+
+    // Content XHTML
+    var contentXhtml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<!DOCTYPE html>\n' +
+      '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ja" lang="ja">\n' +
+      '<head>\n' +
+      '  <meta charset="UTF-8"/>\n' +
+      '  <title>' + escapeXml(title) + '</title>\n' +
+      '  <link rel="stylesheet" type="text/css" href="../style.css"/>\n' +
+      '</head>\n' +
+      '<body>\n' +
+      '<h1>' + escapeXml(title) + '</h1>\n' +
+      '<h2>' + escapeXml(author) + '</h2>\n' +
+      bodyXhtml + '\n' +
+      '</body>\n' +
+      '</html>';
+    zip.file('OEBPS/text/content.xhtml', contentXhtml);
+
+    // Images
+    var imageManifest = '';
+    for (var i = 0; i < images.length; i++) {
+      var img = images[i];
+      zip.file('OEBPS/images/' + img.name, img.data);
+      imageManifest += '    <item id="img' + i + '" href="images/' + escapeXml(img.name) + '" media-type="' + img.mime + '"/>\n';
+    }
+
+    // TOC (nav)
+    var navXhtml =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<!DOCTYPE html>\n' +
+      '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ja">\n' +
+      '<head><meta charset="UTF-8"/><title>Navigation</title></head>\n' +
+      '<body>\n' +
+      '<nav epub:type="toc" id="toc">\n' +
+      '  <ol><li><a href="text/content.xhtml">' + escapeXml(title) + '</a></li></ol>\n' +
+      '</nav>\n' +
+      '</body>\n' +
+      '</html>';
+    zip.file('OEBPS/toc.xhtml', navXhtml);
+
+    // NCX (for EPUB 2 compat)
+    var ncx =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">\n' +
+      '<head><meta name="dtb:uid" content="urn:uuid:' + uuid + '"/></head>\n' +
+      '<docTitle><text>' + escapeXml(title) + '</text></docTitle>\n' +
+      '<navMap>\n' +
+      '  <navPoint id="np1" playOrder="1">\n' +
+      '    <navLabel><text>' + escapeXml(title) + '</text></navLabel>\n' +
+      '    <content src="text/content.xhtml"/>\n' +
+      '  </navPoint>\n' +
+      '</navMap>\n' +
+      '</ncx>';
+    zip.file('OEBPS/toc.ncx', ncx);
+
+    // OPF
+    var opf =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<package xmlns="http://www.idpf.org/2007/opf" version="3.0"\n' +
+      '         unique-identifier="uid" xml:lang="ja" prefix="rendition: http://www.idpf.org/vocab/rendition/#">\n' +
+      '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">\n' +
+      '    <dc:identifier id="uid">urn:uuid:' + uuid + '</dc:identifier>\n' +
+      '    <dc:title>' + escapeXml(title) + '</dc:title>\n' +
+      '    <dc:creator>' + escapeXml(author) + '</dc:creator>\n' +
+      '    <dc:language>ja</dc:language>\n' +
+      '    <meta property="dcterms:modified">' + new Date().toISOString().replace(/\.\d+Z/, 'Z') + '</meta>\n' +
+      '    <meta property="rendition:layout">reflowable</meta>\n' +
+      '  </metadata>\n' +
+      '  <manifest>\n' +
+      '    <item id="content" href="text/content.xhtml" media-type="application/xhtml+xml"/>\n' +
+      '    <item id="style" href="style.css" media-type="text/css"/>\n' +
+      '    <item id="nav" href="toc.xhtml" media-type="application/xhtml+xml" properties="nav"/>\n' +
+      '    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n' +
+      imageManifest +
+      '  </manifest>\n' +
+      '  <spine page-progression-direction="rtl" toc="ncx">\n' +
+      '    <itemref idref="content"/>\n' +
+      '  </spine>\n' +
+      '</package>';
+    zip.file('OEBPS/content.opf', opf);
+
+    return zip;
+  }
+
+  // --- File handling ---
+
+  function processFile(file) {
+    var name = file.name.toLowerCase();
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var buf = e.target.result;
+      if (name.endsWith('.zip')) {
+        processZip(buf, file.name);
+      } else if (name.endsWith('.html') || name.endsWith('.htm')) {
+        var text = detectAndDecode(buf);
+        var result = parseXhtml(text);
+        setResult(result, file.name);
+      } else {
+        var text = detectAndDecode(buf);
+        var result = parseTxt(text);
+        setResult(result, file.name);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function processZip(buf, fileName) {
+    JSZip.loadAsync(buf).then(function(zip) {
+      var htmlFile = null;
+      var txtFile = null;
+      var imgFiles = [];
+
+      zip.forEach(function(path, entry) {
+        if (entry.dir) return;
+        var lower = path.toLowerCase();
+        if (lower.endsWith('.html') || lower.endsWith('.htm')) htmlFile = entry;
+        else if (lower.endsWith('.txt')) txtFile = entry;
+        else if (/\.(jpe?g|png|gif|svg|webp)$/i.test(lower)) imgFiles.push(entry);
+      });
+
+      var mainFile = htmlFile || txtFile;
+      if (!mainFile) {
+        showStatus('No .html or .txt file found in ZIP.', true);
+        return;
+      }
+
+      var promises = [];
+      promises.push(mainFile.async('arraybuffer'));
+      imgFiles.forEach(function(img) {
+        promises.push(img.async('uint8array').then(function(data) {
+          var name = img.name.split('/').pop();
+          var ext = name.split('.').pop().toLowerCase();
+          var mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+                       gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp' }[ext] || 'application/octet-stream';
+          return { name: name, data: data, mime: mime };
+        }));
+      });
+
+      Promise.all(promises).then(function(results) {
+        var textBuf = results[0];
+        var text = detectAndDecode(textBuf);
+        var result;
+        if (htmlFile) {
+          result = parseXhtml(text);
+        } else {
+          result = parseTxt(text);
+        }
+        images = results.slice(1);
+        setResult(result, fileName);
+      });
+    }).catch(function(err) {
+      showStatus('Failed to read ZIP: ' + err.message, true);
+    });
+  }
+
+  function setResult(result, fileName) {
+    bookTitle = result.title;
+    bookAuthor = result.author;
+    bodyXhtml = result.body;
+
+    titleInput.value = bookTitle;
+    authorInput.value = bookAuthor;
+
+    var info = fileName;
+    if (images.length) info += ' + ' + images.length + ' image' + (images.length > 1 ? 's' : '');
+    fileInfo.textContent = info;
+
+    dropZone.classList.add('has-data');
+    clearBtn.style.display = '';
+    metaFields.classList.add('visible');
+    actionRow.classList.add('visible');
+    statusEl.classList.remove('visible');
+
+    // Show preview
+    previewBody.innerHTML = bodyXhtml;
+    preview.classList.add('visible');
+  }
+
+  function clearAll() {
+    bookTitle = '';
+    bookAuthor = '';
+    bodyXhtml = '';
+    images = [];
+    titleInput.value = '';
+    authorInput.value = '';
+    fileInfo.textContent = '';
+    dropZone.classList.remove('has-data');
+    clearBtn.style.display = 'none';
+    metaFields.classList.remove('visible');
+    actionRow.classList.remove('visible');
+    statusEl.classList.remove('visible');
+    preview.classList.remove('visible');
+    previewBody.innerHTML = '';
+    fileInput.value = '';
+  }
+
+  function showStatus(msg, isError) {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle('error', !!isError);
+    statusEl.classList.add('visible');
+  }
+
+  var toastTimer = null;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 2000);
+  }
+
+  // --- Events ---
+
+  dropZone.addEventListener('click', function(e) {
+    if (dropZone.classList.contains('has-data')) return;
+    if (e.target === clearBtn) return;
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', function() {
+    var file = fileInput.files[0];
+    if (file) processFile(file);
+  });
+
+  clearBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    clearAll();
+  });
+
+  ['dragenter', 'dragover'].forEach(function(name) {
+    dropZone.addEventListener(name, function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function(name) {
+    dropZone.addEventListener(name, function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+    });
+  });
+  dropZone.addEventListener('drop', function(e) {
+    var file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  });
+
+  // Convert button
+  convertBtn.addEventListener('click', function() {
+    var title = titleInput.value.trim() || bookTitle || 'Untitled';
+    var author = authorInput.value.trim() || bookAuthor || 'Unknown';
+
+    if (!bodyXhtml) {
+      showStatus('No content to convert.', true);
+      return;
+    }
+
+    convertBtn.disabled = true;
+    showStatus('Generating EPUB\u2026');
+
+    try {
+      var epub = buildEpub(title, author, bodyXhtml, images);
+      epub.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' }).then(function(blob) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (title + ' - ' + author).replace(/[\/\\:*?"<>|]/g, '_') + '.epub';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        convertBtn.disabled = false;
+        statusEl.classList.remove('visible');
+        showToast('EPUB downloaded');
+      }).catch(function(err) {
+        convertBtn.disabled = false;
+        showStatus('EPUB generation failed: ' + err.message, true);
+      });
+    } catch (err) {
+      convertBtn.disabled = false;
+      showStatus('Error: ' + err.message, true);
+    }
+  });
+</script>
+</body>
+</html>
