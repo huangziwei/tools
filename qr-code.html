@@ -277,20 +277,6 @@
     <button class="btn-secondary" id="removeLogo" style="display:none">Remove logo</button>
   </div>
 
-  <div class="color-section">
-    <label class="field-label">QR colors</label>
-    <div class="color-row">
-      <span class="color-row-label">Dots</span>
-      <input type="color" id="dotColorInput" value="#000000">
-      <div class="swatches" id="dotSwatches"></div>
-    </div>
-    <div class="color-row">
-      <span class="color-row-label">Eyes</span>
-      <input type="color" id="eyeColorInput" value="#000000">
-      <div class="swatches" id="eyeSwatches"></div>
-    </div>
-  </div>
-
   <div class="section">
     <label class="toggle-label">
       <input type="checkbox" id="frameToggle">
@@ -304,6 +290,25 @@
       </div>
       <label class="field-label" for="frameLabelInput">Label text</label>
       <input type="text" id="frameLabelInput" value="SCAN ME" placeholder="SCAN ME">
+    </div>
+  </div>
+
+  <div class="color-section">
+    <label class="field-label">Colors</label>
+    <div class="color-row">
+      <span class="color-row-label">Dots</span>
+      <input type="color" id="dotColorInput" value="#000000">
+      <div class="swatches" id="dotSwatches"></div>
+    </div>
+    <div class="color-row">
+      <span class="color-row-label">Eyes</span>
+      <input type="color" id="eyeColorInput" value="#000000">
+      <div class="swatches" id="eyeSwatches"></div>
+    </div>
+    <div class="color-row" id="labelColorRow" style="display:none">
+      <span class="color-row-label">Label</span>
+      <input type="color" id="labelColorInput" value="#000000">
+      <div class="swatches" id="labelSwatches"></div>
     </div>
   </div>
 
@@ -327,8 +332,11 @@
   const removeLogo = document.getElementById('removeLogo');
   const dotColorInput = document.getElementById('dotColorInput');
   const eyeColorInput = document.getElementById('eyeColorInput');
+  const labelColorInput = document.getElementById('labelColorInput');
   const dotSwatches = document.getElementById('dotSwatches');
   const eyeSwatches = document.getElementById('eyeSwatches');
+  const labelSwatches = document.getElementById('labelSwatches');
+  const labelColorRow = document.getElementById('labelColorRow');
   const frameToggle = document.getElementById('frameToggle');
   const frameOptions = document.getElementById('frameOptions');
   const framePresets = document.getElementById('framePresets');
@@ -338,6 +346,7 @@
   let logoImg = null;
   let dotColor = '#000000';
   let eyeColor = '#000000';
+  let labelColor = '#000000';
   let palette = [];
   let currentFrame = 'card';
   let debounceTimer = null;
@@ -398,7 +407,7 @@
   }
 
   function renderPalette() {
-    [dotSwatches, eyeSwatches].forEach(container => {
+    [dotSwatches, eyeSwatches, labelSwatches].forEach(container => {
       container.innerHTML = '';
       palette.forEach(hex => {
         const btn = document.createElement('button');
@@ -629,7 +638,7 @@
     // --- Draw frame decorations ---
     if (useFrame && currentFrame === 'card' && labelText) {
       const fontSize = Math.round(qrTotalSize * 0.055);
-      ctx.fillStyle = dotColor;
+      ctx.fillStyle = labelColor;
       ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -645,7 +654,7 @@
       const x2 = canvasW - inset;
       const y2Limit = canvasH - (labelText ? labelH : 0) - inset;
 
-      ctx.strokeStyle = dotColor;
+      ctx.strokeStyle = labelColor;
       ctx.lineWidth = lw;
       ctx.lineCap = 'round';
 
@@ -676,7 +685,7 @@
 
       if (labelText) {
         const fontSize = Math.round(qrTotalSize * 0.05);
-        ctx.fillStyle = dotColor;
+        ctx.fillStyle = labelColor;
         ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -690,7 +699,7 @@
       const bannerR = 24;
 
       // Banner strip at bottom
-      ctx.fillStyle = dotColor;
+      ctx.fillStyle = labelColor;
       ctx.beginPath();
       ctx.moveTo(0, bannerY);
       ctx.lineTo(canvasW, bannerY);
@@ -736,6 +745,8 @@
           dotColorInput.value = dotColor;
           eyeColor = palette.length > 1 ? palette[1] : palette[0];
           eyeColorInput.value = eyeColor;
+          labelColor = palette[0];
+          labelColorInput.value = labelColor;
         }
         removeLogo.style.display = '';
         logoHint.style.display = 'none';
@@ -751,8 +762,10 @@
     palette = [];
     dotColor = '#000000';
     eyeColor = '#000000';
+    labelColor = '#000000';
     dotColorInput.value = '#000000';
     eyeColorInput.value = '#000000';
+    labelColorInput.value = '#000000';
     renderPalette();
     removeLogo.style.display = 'none';
     logoInput.value = '';
@@ -794,6 +807,17 @@
     eyeColorInput.value = eyeColor;
     render();
   });
+  labelColorInput.addEventListener('input', function() {
+    labelColor = labelColorInput.value;
+    render();
+  });
+  labelSwatches.addEventListener('click', function(e) {
+    var btn = e.target.closest('.swatch');
+    if (!btn) return;
+    labelColor = btn.dataset.color;
+    labelColorInput.value = labelColor;
+    render();
+  });
 
   // Logo drag-and-drop onto preview area
   ['dragenter', 'dragover'].forEach(function(name) {
@@ -818,6 +842,7 @@
   // Frame toggle
   frameToggle.addEventListener('change', function() {
     frameOptions.style.display = frameToggle.checked ? '' : 'none';
+    labelColorRow.style.display = frameToggle.checked ? '' : 'none';
     render();
   });
 
