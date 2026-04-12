@@ -308,7 +308,7 @@
   <div>
     <label class="field-label" for="htmlInput">HTML source</label>
     <div class="drop-zone" id="dropZone">
-      <textarea id="htmlInput" rows="3" placeholder="Paste HTML source here (Cmd+U / Ctrl+U in browser to view source)" readonly></textarea>
+      <textarea id="htmlInput" rows="3" placeholder="Paste HTML source here" readonly></textarea>
       <input type="file" id="fileInput" accept=".html,.htm,.txt,.xml" style="display:none">
       <div class="drop-actions">
         <button class="btn-secondary" id="browseBtn">Browse file</button>
@@ -362,6 +362,21 @@
   var copyAllBtn = document.getElementById('copyAllBtn');
 
   var typeChips = document.getElementById('typeChips');
+
+  // Browser-adaptive "view source" shortcut hint
+  (function() {
+    var ua = navigator.userAgent;
+    var shortcut;
+    if (/Mac/.test(navigator.platform) || /Macintosh/.test(ua)) {
+      if (/Safari/.test(ua) && !/Chrome/.test(ua))
+        shortcut = '\u2325\u2318U';      // Option+Cmd+U for Safari
+      else
+        shortcut = '\u2318U';             // Cmd+U for Firefox/Chrome/Edge on Mac
+    } else {
+      shortcut = 'Ctrl+U';               // Windows/Linux
+    }
+    htmlInput.placeholder = 'Paste HTML source here (' + shortcut + ' in browser to view source)';
+  })();
 
   var rawHtml = '';
   var parsedDoc = null;
