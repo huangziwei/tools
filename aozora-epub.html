@@ -231,14 +231,29 @@
     background: var(--panel);
   }
   .preview-body {
+    overflow-x: auto;
+    overflow-y: hidden;
+    direction: rtl;
+  }
+  .preview-inner {
     padding: 1rem;
     font-size: 0.85rem;
-    max-height: 300px;
-    overflow-y: auto;
-    line-height: 1.7;
+    height: 360px;
+    line-height: 1.8;
     font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+    writing-mode: vertical-rl;
+    -webkit-writing-mode: vertical-rl;
+    text-align: justify;
+    direction: ltr;
+    width: max-content;
   }
-  .preview-body rt { font-size: 0.55em; }
+  .preview-inner p { text-indent: 1em; margin: 0; }
+  .preview-inner rt { font-size: 0.55em; }
+  .preview-inner em.sesame {
+    font-style: normal;
+    -webkit-text-emphasis: filled sesame;
+    text-emphasis: filled sesame;
+  }
 
   footer {
     margin-top: 2.5rem;
@@ -311,7 +326,7 @@
 
   <div class="preview" id="preview">
     <div class="preview-header">Preview</div>
-    <div class="preview-body" id="previewBody"></div>
+    <div class="preview-body" id="previewScroll"><div class="preview-inner" id="previewBody"></div></div>
   </div>
 
   <footer>
@@ -1076,6 +1091,8 @@
     // Show preview
     previewBody.innerHTML = bodyXhtml;
     preview.classList.add('visible');
+    // Scroll to start (right edge in vertical-rl)
+    requestAnimationFrame(function() { document.getElementById('previewScroll').scrollLeft = 0; });
   }
 
   function updateCoverPreview() {
