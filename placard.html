@@ -430,6 +430,8 @@
 
   <div class="block-toolbar">
     <button class="btn-secondary" id="addBlockBtn">+ Add text</button>
+    <span style="flex:1"></span>
+    <button class="btn-secondary" id="clearAllBtn" style="color:var(--muted)">Clear all</button>
     <div class="block-controls" id="blockControls">
       <span class="separator"></span>
       <select id="fontSelect"></select>
@@ -1006,6 +1008,11 @@
     var offsetY = 0.05 + blocks.length * 0.06;
     if (offsetY > 0.7) offsetY = 0.7;
     addBlock({ y: offsetY });
+  });
+
+  document.getElementById('clearAllBtn').addEventListener('click', function() {
+    while (blocks.length) deleteBlock(blocks[0].id);
+    scheduleSave();
   });
 
   fontSizeInput.addEventListener('input', function() {
