@@ -165,6 +165,31 @@
     flex-wrap: wrap;
   }
 
+  .palette-custom {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    align-items: center;
+  }
+  .palette-custom label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .palette-custom input[type="color"] {
+    width: 28px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+  }
+  .palette-custom input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+  .palette-custom input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+
   .custom-size {
     display: none;
     gap: 0.5rem;
@@ -356,14 +381,19 @@
 
   <div class="controls-row">
     <div>
-      <label class="field-label">Color</label>
-      <div class="chip-row" id="colorChips">
-        <button class="chip active" data-color="dark">
-          <span class="color-swatch" style="background:#002c42"></span>Dark
+      <label class="field-label">Palette</label>
+      <div class="chip-row" id="paletteChips">
+        <button class="chip active" data-bg="#002c42" data-fg="#fff200">
+          <span class="color-swatch" style="background:#002c42"></span><span class="color-swatch" style="background:#fff200"></span>
         </button>
-        <button class="chip" data-color="light">
-          <span class="color-swatch" style="background:#fff200"></span>Light
+        <button class="chip" data-bg="#40285d" data-fg="#61ce8c">
+          <span class="color-swatch" style="background:#40285d"></span><span class="color-swatch" style="background:#61ce8c"></span>
         </button>
+        <button class="btn-icon" id="swapColors" title="Swap background and text colors">&#8644;</button>
+      </div>
+      <div class="palette-custom">
+        <label>BG <input type="color" id="bgColorInput" value="#002c42"></label>
+        <label>FG <input type="color" id="fgColorInput" value="#fff200"></label>
       </div>
     </div>
     <div>
@@ -422,13 +452,16 @@
     serif: '"Noto Serif TC", "Noto Serif SC", "SimSun", "PMingLiU", Georgia, serif',
     mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
   };
-  var THEMES = {
-    dark:  { bg: '#002c42', fg: '#fff200' },
-    light: { bg: '#fff200', fg: '#002c42' }
-  };
+  var PALETTES = [
+    { bg: '#002c42', fg: '#fff200' },
+    { bg: '#40285d', fg: '#61ce8c' }
+  ];
 
   var workspace = document.getElementById('workspace');
-  var colorChips = document.getElementById('colorChips');
+  var paletteChips = document.getElementById('paletteChips');
+  var swapColorsBtn = document.getElementById('swapColors');
+  var bgColorInput = document.getElementById('bgColorInput');
+  var fgColorInput = document.getElementById('fgColorInput');
   var sizeChips = document.getElementById('sizeChips');
   var customSize = document.getElementById('customSize');
   var customW = document.getElementById('customW');
@@ -448,7 +481,7 @@
   var toastTimer = null;
 
   // --- State ---
-  var state = { color: 'dark', w: 720, h: 540, sizePreset: '720x540' };
+  var state = { bg: '#002c42', fg: '#fff200', w: 720, h: 540, sizePreset: '720x540' };
   var nextId = 1;
   var blocks = []; // {id, x, y, w, fontSize, font, bold, italic, text} — x/y/w as fraction 0..1
   var selectedId = null;
@@ -486,13 +519,13 @@
   }
 
   function applyTheme() {
-    var theme = THEMES[state.color];
-    workspace.style.background = theme.bg;
-    // Derive block border colors from theme foreground
-    var fg = theme.fg;
+    workspace.style.background = state.bg;
+    var fg = state.fg;
     var r = parseInt(fg.slice(1,3),16), g = parseInt(fg.slice(3,5),16), b = parseInt(fg.slice(5,7),16);
     workspace.style.setProperty('--block-border', 'rgba('+r+','+g+','+b+',0.3)');
     workspace.style.setProperty('--block-border-hover', 'rgba('+r+','+g+','+b+',0.5)');
+    bgColorInput.value = state.bg;
+    fgColorInput.value = state.fg;
   }
 
   // --- Block management ---
@@ -554,7 +587,6 @@
   function syncBlock(b) {
     var el = getBlockEl(b.id);
     if (!el) return;
-    var theme = THEMES[state.color];
     var content = el.querySelector('.block-content');
     el.style.left = (b.x * 100) + '%';
     el.style.top = (b.y * 100) + '%';
@@ -563,7 +595,7 @@
     content.style.fontFamily = FONTS[b.font] || FONTS.sans;
     content.style.fontWeight = b.bold ? 'bold' : 'normal';
     content.style.fontStyle = b.italic ? 'italic' : 'normal';
-    content.style.color = theme.fg;
+    content.style.color = state.fg;
   }
 
   function syncAllBlocks() {
@@ -809,16 +841,39 @@
     if (selectedId != null) deleteBlock(selectedId);
   });
 
-  // --- Color handling ---
-  colorChips.addEventListener('click', function(e) {
-    var chip = e.target.closest('.chip');
-    if (!chip) return;
-    state.color = chip.dataset.color;
-    var chips = colorChips.querySelectorAll('.chip');
-    for (var i = 0; i < chips.length; i++)
-      chips[i].classList.toggle('active', chips[i].dataset.color === state.color);
+  // --- Palette handling ---
+  function updatePaletteChipUI() {
+    var chips = paletteChips.querySelectorAll('.chip');
+    for (var i = 0; i < chips.length; i++) {
+      var c = chips[i];
+      c.classList.toggle('active', c.dataset.bg === state.bg && c.dataset.fg === state.fg);
+    }
+  }
+
+  function setPalette(bg, fg) {
+    state.bg = bg;
+    state.fg = fg;
+    updatePaletteChipUI();
     applyTheme();
     syncAllBlocks();
+  }
+
+  paletteChips.addEventListener('click', function(e) {
+    var chip = e.target.closest('.chip');
+    if (!chip) return;
+    setPalette(chip.dataset.bg, chip.dataset.fg);
+  });
+
+  swapColorsBtn.addEventListener('click', function() {
+    setPalette(state.fg, state.bg);
+  });
+
+  bgColorInput.addEventListener('input', function() {
+    setPalette(bgColorInput.value, state.fg);
+  });
+
+  fgColorInput.addEventListener('input', function() {
+    setPalette(state.bg, fgColorInput.value);
   });
 
   // --- Size handling ---
@@ -891,9 +946,8 @@
     c.width = state.w;
     c.height = state.h;
     var ctx = c.getContext('2d');
-    var theme = THEMES[state.color];
 
-    ctx.fillStyle = theme.bg;
+    ctx.fillStyle = state.bg;
     ctx.fillRect(0, 0, state.w, state.h);
 
     for (var i = 0; i < blocks.length; i++) {
@@ -905,7 +959,7 @@
       var fs = b.fontSize;
       var lh = fs * 1.125;
 
-      ctx.fillStyle = theme.fg;
+      ctx.fillStyle = state.fg;
       var fontStyle = (b.italic ? 'italic ' : '') + (b.bold ? 'bold ' : '') + fs + 'px ' + (FONTS[b.font] || FONTS.sans);
       ctx.font = fontStyle;
       ctx.textBaseline = 'top';
@@ -940,7 +994,8 @@
   // --- Share link ---
   function encodeState() {
     var data = {
-      c: state.color,
+      bg: state.bg,
+      fg: state.fg,
       sw: state.w,
       sh: state.h,
       b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, fs: b.fontSize, f: b.font, bo: b.bold, it: b.italic, t: b.text }; })
@@ -972,7 +1027,8 @@
     if (!hash) return false;
     var s = decodeState(hash);
     if (!s) return false;
-    if (s.c && THEMES[s.c]) state.color = s.c;
+    if (s.bg) state.bg = s.bg;
+    if (s.fg) state.fg = s.fg;
     if (s.sw && s.sh) {
       state.w = s.sw;
       state.h = s.sh;
@@ -986,9 +1042,7 @@
       if (!found) { customW.value = s.sw; customH.value = s.sh; }
       updateSizeChipUI(state.sizePreset);
     }
-    var cchips = colorChips.querySelectorAll('.chip');
-    for (var i = 0; i < cchips.length; i++)
-      cchips[i].classList.toggle('active', cchips[i].dataset.color === state.color);
+    updatePaletteChipUI();
     if (s.b && s.b.length) {
       for (var i = 0; i < s.b.length; i++) {
         var sb = s.b[i];
