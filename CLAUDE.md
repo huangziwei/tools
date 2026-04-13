@@ -24,7 +24,7 @@ Every tool page follows this layout:
 <p class="lead">One-line description.</p>
 <!-- ... tool UI ... -->
 <footer>
-  All data stays on your device. &middot;
+  All data stays on your device.<br>
   <!-- TOOL_META_START --><!-- TOOL_META_END -->
 </footer>
 ```
@@ -32,9 +32,8 @@ Every tool page follows this layout:
 - `.page-header` is a flex row: h1 left, GitHub icon right.
 - `.lead` is the tool description. Do **not** add "Everything runs in
   your browser" — the footer already conveys that.
-- Footer line 1 is text only (privacy note + date). Links stay in the
-  header icon. Optional "built with" credits go after the TOOL_META
-  region in the footer.
+- Footer line 1: privacy note. Line 2: date (+ optional "built with"
+  credits after TOOL_META region). Links stay in header icon.
 
 ## Contract with the build automation
 
