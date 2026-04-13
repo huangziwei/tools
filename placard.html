@@ -339,6 +339,26 @@
   }
   .text-block.selected .block-resize { display: block; }
 
+  /* --- Drag guides --- */
+  .drag-guides { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 20; }
+  .workspace.dragging .drag-guides { display: block; }
+
+  .guide-line {
+    position: absolute;
+    background: rgba(255,255,255,0.35);
+  }
+  .guide-h { height: 1px; left: 0; right: 0; }
+  .guide-v { width: 1px; top: 0; bottom: 0; }
+
+  .ruler-tick {
+    position: absolute;
+    font-size: 9px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    color: rgba(255,255,255,0.55);
+    line-height: 1;
+    white-space: nowrap;
+  }
+
   .actions {
     margin-top: 1rem;
     display: flex;
@@ -382,7 +402,9 @@
   <p class="lead">Make text placards in the style of nostalgic  <a href="https://evchk.fandom.com/zh/wiki/Iknowthissong.org">HK lyrics billboards</a>.</p>
 
   <div class="workspace-wrap">
-    <div class="workspace" id="workspace"></div>
+    <div class="workspace" id="workspace">
+      <div class="drag-guides" id="dragGuides"></div>
+    </div>
   </div>
 
   <div class="block-toolbar">
@@ -675,6 +697,81 @@
     if (editingId === id) editingId = null;
   }
 
+  // --- Drag guides ---
+  var dragGuides = document.getElementById('dragGuides');
+
+  function showGuides(b) {
+    var el = getBlockEl(b.id);
+    if (!el) return;
+    workspace.classList.add('dragging');
+    dragGuides.innerHTML = '';
+
+    var content = el.querySelector('.block-content');
+    var wsRect = workspace.getBoundingClientRect();
+    var cRect = content.getBoundingClientRect();
+
+    // Block edges in % relative to workspace
+    var left = b.x;
+    var top = b.y;
+    var right = b.x + (cRect.width / wsRect.width);
+    var bottom = b.y + (cRect.height / wsRect.height);
+    var cx = (left + right) / 2;
+    var cy = (top + bottom) / 2;
+
+    // Edge guide lines — extending from block edges to workspace edges
+    addGuide('guide-h', top);   // top edge
+    addGuide('guide-h', bottom);// bottom edge
+    addGuide('guide-v', left);  // left edge
+    addGuide('guide-v', right); // right edge
+
+    // Center cross-hairs
+    addGuide('guide-h', cy);
+    addGuide('guide-v', cx);
+
+    // Workspace center guides (50% lines) — slightly brighter
+    var chH = addGuide('guide-h', 0.5);
+    var chV = addGuide('guide-v', 0.5);
+    chH.style.background = 'rgba(255,255,255,0.15)';
+    chV.style.background = 'rgba(255,255,255,0.15)';
+    chH.style.borderTop = '1px dashed rgba(255,255,255,0.25)';
+    chH.style.background = 'none';
+    chV.style.borderLeft = '1px dashed rgba(255,255,255,0.25)';
+    chV.style.background = 'none';
+
+    // Ruler ticks at four edges (in canvas pixels)
+    var pxL = Math.round(left * state.w);
+    var pxR = Math.round(right * state.w);
+    var pxT = Math.round(top * state.h);
+    var pxB = Math.round(bottom * state.h);
+
+    addTick(pxL + 'px', 'left:' + (left*100) + '%; bottom: 2px;');
+    addTick(pxR + 'px', 'left:' + (right*100) + '%; bottom: 2px;');
+    addTick(pxT + 'px', 'top:' + (top*100) + '%; left: 2px;');
+    addTick(pxB + 'px', 'top:' + (bottom*100) + '%; left: 2px;');
+  }
+
+  function addGuide(cls, frac) {
+    var el = document.createElement('div');
+    el.className = 'guide-line ' + cls;
+    if (cls === 'guide-h') el.style.top = (frac * 100) + '%';
+    else el.style.left = (frac * 100) + '%';
+    dragGuides.appendChild(el);
+    return el;
+  }
+
+  function addTick(label, style) {
+    var el = document.createElement('div');
+    el.className = 'ruler-tick';
+    el.textContent = label;
+    el.style.cssText = style;
+    dragGuides.appendChild(el);
+  }
+
+  function hideGuides() {
+    workspace.classList.remove('dragging');
+    dragGuides.innerHTML = '';
+  }
+
   // --- Pointer interactions on workspace ---
   var dragState = null; // {type:'move'|'resize', blockId, startX, startY, origX, origY, origW, moved}
 
@@ -745,15 +842,18 @@
       b.x = Math.max(-0.5, Math.min(0.95, b.x));
       b.y = Math.max(-0.5, Math.min(0.95, b.y));
       syncBlock(b);
+      showGuides(b);
     } else if (dragState.type === 'resize') {
       b.w = dragState.origW + dx / rect.width;
       b.w = Math.max(0.05, Math.min(1, b.w));
       syncBlock(b);
+      showGuides(b);
     }
   });
 
   workspace.addEventListener('pointerup', function(e) {
     if (!dragState) return;
+    hideGuides();
     var id = dragState.blockId;
     var wasMoved = dragState.moved;
     var wasMove = dragState.type === 'move';
