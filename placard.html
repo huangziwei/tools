@@ -307,7 +307,7 @@
   .text-block {
     position: absolute;
     cursor: move;
-    border: 1px dashed var(--block-border);
+    border: 2px dashed transparent;
     transition: border-color 0.1s;
   }
   .text-block:hover {
@@ -321,7 +321,7 @@
   }
   .block-content {
     outline: none;
-    white-space: pre-wrap;
+    white-space: pre;
     word-break: break-word;
     min-height: 1em;
     line-height: 1.125;
@@ -1164,7 +1164,7 @@
       div.style.fontStyle = b.italic ? 'italic' : 'normal';
       div.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
       div.style.color = state.fg;
-      div.style.whiteSpace = 'pre-wrap';
+      div.style.whiteSpace = 'pre';
       div.style.wordBreak = 'break-word';
       div.style.lineHeight = '1.125';
       div.style.padding = '2px';
