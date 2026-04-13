@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gotchi</title>
+<title>Placard</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -376,7 +376,7 @@
 <body>
 <main>
   <div class="page-header">
-    <h1>Gotchi</h1>
+    <h1>Placard</h1>
     <!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->
   </div>
   <p class="lead">Generate karaoke-style text images.</p>
@@ -978,7 +978,7 @@
   downloadBtn.addEventListener('click', function() {
     var c = renderToCanvas();
     var a = document.createElement('a');
-    a.download = 'gotchi.png';
+    a.download = 'placard.png';
     a.href = c.toDataURL('image/png');
     a.click();
   });
