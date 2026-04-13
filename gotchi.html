@@ -684,6 +684,15 @@
     }
   });
 
+  // Double-click empty workspace area → add block at that position
+  workspace.addEventListener('dblclick', function(e) {
+    if (e.target.closest('.text-block')) return;
+    var rect = workspace.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width;
+    var y = (e.clientY - rect.top) / rect.height;
+    addBlock({ x: x, y: y, w: Math.min(0.925, 1 - x - 0.02) });
+  });
+
   // Click outside workspace to deselect
   document.addEventListener('pointerdown', function(e) {
     if (!e.target.closest('.workspace') && !e.target.closest('.block-toolbar') && !e.target.closest('.actions')) {
