@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gotchi</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111418;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --border-strong: #cbd5e1;
+    --panel: #f8fafc;
+    --panel-active: #eff6ff;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #f1f5f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eaed;
+      --muted: #9aa0a6;
+      --border: #262a30;
+      --border-strong: #3a3f47;
+      --panel: #14171c;
+      --panel-active: #17253f;
+      --accent: #60a5fa;
+      --accent-hover: #93c5fd;
+      --code-bg: #1a1f26;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 2rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 620px; }
+
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.5rem; }
+  h1 { font-size: 1.75rem; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+  .github-link { color: var(--muted); display: flex; }
+  .github-link:hover { color: var(--fg); text-decoration: none; }
+  p.lead { color: var(--muted); margin: 0 0 2rem; font-size: 0.95rem; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  label.field-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.4rem;
+    color: var(--fg);
+  }
+
+  textarea {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    transition: border-color 0.15s;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  textarea::placeholder { color: var(--muted); opacity: 0.7; }
+
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.95rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    transition: border-color 0.15s;
+    font-family: inherit;
+  }
+  input[type="text"]:focus, input[type="number"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  input[type="text"]::placeholder, input[type="number"]::placeholder { color: var(--muted); opacity: 0.7; }
+
+  .section { margin-top: 1.5rem; }
+
+  .row {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .row > * { flex: 1; min-width: 0; }
+
+  .btn-primary {
+    padding: 0.6rem 1.2rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+
+  .btn-secondary {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  .chip-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--code-bg);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .chip:hover {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .chip.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .color-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid var(--border-strong);
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+
+  .canvas-wrap {
+    margin-top: 1.5rem;
+    text-align: center;
+  }
+  .canvas-wrap canvas {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .share-row {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+  }
+  .share-row input {
+    flex: 1;
+    font-size: 0.82rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(0);
+    padding: 0.5rem 1.2rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: var(--fg);
+    color: var(--bg);
+    border-radius: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.hide { opacity: 0; transform: translateX(-50%) translateY(0.5rem); }
+
+  .custom-size {
+    display: none;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+  }
+  .custom-size.visible { display: flex; }
+  .custom-size input[type="number"] {
+    width: 80px;
+    flex: none;
+    text-align: center;
+  }
+  .custom-size .times {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  footer {
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="page-header">
+    <h1>Gotchi</h1>
+    <!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->
+  </div>
+  <p class="lead">Generate karaoke-style text images.</p>
+
+  <div>
+    <label class="field-label" for="lyricsInput">Text</label>
+    <textarea id="lyricsInput" rows="4" placeholder="Type or paste text here"></textarea>
+  </div>
+
+  <div class="section row">
+    <div>
+      <label class="field-label" for="watermarkInput">Bottom left</label>
+      <input type="text" id="watermarkInput" placeholder="Optional">
+    </div>
+    <div>
+      <label class="field-label" for="taglineInput">Bottom right</label>
+      <input type="text" id="taglineInput" placeholder="Optional">
+    </div>
+  </div>
+
+  <div class="section">
+    <label class="field-label">Color</label>
+    <div class="chip-row" id="colorChips">
+      <button class="chip active" data-color="dark">
+        <span class="color-swatch" style="background:#002c42"></span>Dark
+      </button>
+      <button class="chip" data-color="light">
+        <span class="color-swatch" style="background:#fff200"></span>Light
+      </button>
+    </div>
+  </div>
+
+  <div class="section">
+    <label class="field-label">Size</label>
+    <div class="chip-row" id="sizeChips">
+      <button class="chip active" data-w="720" data-h="540">720 × 540</button>
+      <button class="chip" data-w="1170" data-h="2532">iPhone vertical</button>
+      <button class="chip" data-w="2532" data-h="1170">iPhone horizontal</button>
+      <button class="chip" data-w="custom" data-h="custom">Custom</button>
+    </div>
+    <div class="custom-size" id="customSize">
+      <input type="number" id="customW" min="100" max="4096" value="720" placeholder="W">
+      <span class="times">×</span>
+      <input type="number" id="customH" min="100" max="4096" value="540" placeholder="H">
+    </div>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="canvas" width="720" height="540"></canvas>
+  </div>
+
+  <div class="actions">
+    <button class="btn-primary" id="downloadBtn">Download PNG</button>
+    <button class="btn-secondary" id="copyImgBtn">Copy image</button>
+    <button class="btn-secondary" id="shareLinkBtn">Copy share link</button>
+  </div>
+
+  <footer>
+    All data stays on your device.<br>
+    <!-- TOOL_META_START --><!-- TOOL_META_END -->
+  </footer>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+  var canvas = document.getElementById('canvas');
+  var ctx = canvas.getContext('2d');
+  var lyricsInput = document.getElementById('lyricsInput');
+  var watermarkInput = document.getElementById('watermarkInput');
+  var taglineInput = document.getElementById('taglineInput');
+  var colorChips = document.getElementById('colorChips');
+  var sizeChips = document.getElementById('sizeChips');
+  var customSize = document.getElementById('customSize');
+  var customW = document.getElementById('customW');
+  var customH = document.getElementById('customH');
+  var downloadBtn = document.getElementById('downloadBtn');
+  var copyImgBtn = document.getElementById('copyImgBtn');
+  var shareLinkBtn = document.getElementById('shareLinkBtn');
+  var toastTimer = null;
+
+  var THEMES = {
+    dark:  { bg: '#002c42', fg: '#fff200' },
+    light: { bg: '#fff200', fg: '#002c42' }
+  };
+
+  var state = {
+    color: 'dark',
+    w: 720,
+    h: 540,
+    sizePreset: '720x540'
+  };
+
+  function showToast(msg) {
+    var el = document.getElementById('toast');
+    clearTimeout(toastTimer);
+    el.textContent = msg;
+    el.className = 'toast show';
+    toastTimer = setTimeout(function() { el.className = 'toast hide'; }, 1200);
+  }
+
+  // --- Canvas rendering ---
+
+  function wrapText(ctx, text, maxWidth) {
+    var lines = text.split('\n');
+    var result = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line === '') { result.push(''); continue; }
+      var current = '';
+      for (var j = 0; j < line.length; j++) {
+        var ch = line[j];
+        var test = current + ch;
+        if (ctx.measureText(test).width > maxWidth && current) {
+          result.push(current);
+          current = ch;
+        } else {
+          current = test;
+        }
+      }
+      if (current) result.push(current);
+    }
+    return result;
+  }
+
+  function render() {
+    var w = state.w;
+    var h = state.h;
+    canvas.width = w;
+    canvas.height = h;
+
+    var theme = THEMES[state.color];
+    ctx.fillStyle = theme.bg;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = theme.fg;
+
+    // Scale padding/font relative to canvas size
+    var scale = Math.min(w, h) / 540;
+    var pad = Math.round(27 * scale);
+    var mainSize = Math.round(56 * scale);
+    var lineHeight = Math.round(63 * scale);
+    var wmSize = Math.round(20 * scale);
+    var tagSize = Math.round(14 * scale);
+    var fontStack = '"Microsoft JhengHei", "SimHei", "Noto Sans TC", "Noto Sans SC", "Hiragino Sans GB", "PingFang SC", sans-serif';
+
+    // Main text
+    var lyrics = lyricsInput.value;
+    if (lyrics) {
+      ctx.font = 'bold ' + mainSize + 'px ' + fontStack;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      var maxW = w - pad * 2;
+      var wrapped = wrapText(ctx, lyrics, maxW);
+      for (var i = 0; i < wrapped.length; i++) {
+        ctx.fillText(wrapped[i], pad, pad + i * lineHeight);
+      }
+    }
+
+    // Bottom left watermark
+    var wm = watermarkInput.value;
+    if (wm) {
+      ctx.font = 'bold ' + wmSize + 'px ' + fontStack;
+      ctx.textBaseline = 'bottom';
+      ctx.textAlign = 'left';
+      ctx.fillText(wm, pad, h - pad);
+    }
+
+    // Bottom right tagline
+    var tag = taglineInput.value;
+    if (tag) {
+      ctx.font = 'bold ' + tagSize + 'px ' + fontStack;
+      ctx.textBaseline = 'bottom';
+      ctx.textAlign = 'right';
+      ctx.fillText(tag, w - pad, h - pad);
+    }
+  }
+
+  // --- Size handling ---
+
+  function setSize(w, h, preset) {
+    state.w = w;
+    state.h = h;
+    state.sizePreset = preset;
+    render();
+  }
+
+  function updateSizeChipUI(preset) {
+    var chips = sizeChips.querySelectorAll('.chip');
+    for (var i = 0; i < chips.length; i++) {
+      var c = chips[i];
+      var cw = c.dataset.w;
+      var ch = c.dataset.h;
+      var id = (cw === 'custom') ? 'custom' : cw + 'x' + ch;
+      c.classList.toggle('active', id === preset);
+    }
+    customSize.classList.toggle('visible', preset === 'custom');
+  }
+
+  sizeChips.addEventListener('click', function(e) {
+    var chip = e.target.closest('.chip');
+    if (!chip) return;
+    var cw = chip.dataset.w;
+    var ch = chip.dataset.h;
+    if (cw === 'custom') {
+      updateSizeChipUI('custom');
+      setSize(parseInt(customW.value) || 720, parseInt(customH.value) || 540, 'custom');
+    } else {
+      var w = parseInt(cw), h = parseInt(ch);
+      updateSizeChipUI(w + 'x' + h);
+      setSize(w, h, w + 'x' + h);
+    }
+  });
+
+  customW.addEventListener('input', function() {
+    if (state.sizePreset === 'custom') setSize(parseInt(customW.value) || 100, state.h, 'custom');
+  });
+  customH.addEventListener('input', function() {
+    if (state.sizePreset === 'custom') setSize(state.w, parseInt(customH.value) || 100, 'custom');
+  });
+
+  // --- Color handling ---
+
+  colorChips.addEventListener('click', function(e) {
+    var chip = e.target.closest('.chip');
+    if (!chip) return;
+    state.color = chip.dataset.color;
+    var chips = colorChips.querySelectorAll('.chip');
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].classList.toggle('active', chips[i].dataset.color === state.color);
+    }
+    render();
+  });
+
+  // --- Live re-render on input ---
+
+  lyricsInput.addEventListener('input', render);
+  watermarkInput.addEventListener('input', render);
+  taglineInput.addEventListener('input', render);
+
+  // --- Download ---
+
+  downloadBtn.addEventListener('click', function() {
+    var a = document.createElement('a');
+    a.download = 'gotchi.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  });
+
+  // --- Copy image ---
+
+  copyImgBtn.addEventListener('click', function() {
+    canvas.toBlob(function(blob) {
+      navigator.clipboard.write([new ClipboardItem({'image/png': blob})]).then(function() {
+        showToast('Copied image');
+      }).catch(function() {
+        showToast('Copy failed');
+      });
+    }, 'image/png');
+  });
+
+  // --- Share link (encode state in hash) ---
+
+  function encodeState() {
+    var obj = {
+      t: lyricsInput.value,
+      w: watermarkInput.value,
+      g: taglineInput.value,
+      c: state.color,
+      sw: state.w,
+      sh: state.h
+    };
+    return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+  }
+
+  function decodeState(hash) {
+    try {
+      var json = decodeURIComponent(escape(atob(hash)));
+      return JSON.parse(json);
+    } catch(e) { return null; }
+  }
+
+  shareLinkBtn.addEventListener('click', function() {
+    var url = location.origin + location.pathname + '#' + encodeState();
+    navigator.clipboard.writeText(url).then(function() {
+      showToast('Link copied');
+    }).catch(function() {
+      showToast('Copy failed');
+    });
+  });
+
+  // --- Load from hash on init ---
+
+  function loadFromHash() {
+    var hash = location.hash.slice(1);
+    if (!hash) return;
+    var s = decodeState(hash);
+    if (!s) return;
+    if (s.t) lyricsInput.value = s.t;
+    if (s.w) watermarkInput.value = s.w;
+    if (s.g) taglineInput.value = s.g;
+    if (s.c && THEMES[s.c]) state.color = s.c;
+    if (s.sw && s.sh) {
+      state.w = s.sw;
+      state.h = s.sh;
+      // Find matching preset or use custom
+      var preset = s.sw + 'x' + s.sh;
+      var found = false;
+      var chips = sizeChips.querySelectorAll('.chip');
+      for (var i = 0; i < chips.length; i++) {
+        if (chips[i].dataset.w + 'x' + chips[i].dataset.h === preset) { found = true; break; }
+      }
+      state.sizePreset = found ? preset : 'custom';
+      if (!found) {
+        customW.value = s.sw;
+        customH.value = s.sh;
+      }
+      updateSizeChipUI(state.sizePreset);
+    }
+    // Update color chip UI
+    var cchips = colorChips.querySelectorAll('.chip');
+    for (var i = 0; i < cchips.length; i++) {
+      cchips[i].classList.toggle('active', cchips[i].dataset.color === state.color);
+    }
+  }
+
+  loadFromHash();
+  render();
+</script>
+</body>
+</html>
