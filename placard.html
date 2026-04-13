@@ -867,6 +867,14 @@
     }
   });
 
+  // Force plain-text paste
+  workspace.addEventListener('paste', function(e) {
+    if (!editingId) return;
+    e.preventDefault();
+    var text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+
   // Save text on every input inside a contenteditable
   workspace.addEventListener('input', function(e) {
     if (!editingId) return;
