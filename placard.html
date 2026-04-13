@@ -624,6 +624,7 @@
     content.style.fontStyle = b.italic ? 'italic' : 'normal';
     content.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
     content.style.color = state.fg;
+    if (typeof scheduleSave === 'function') scheduleSave();
   }
 
   function syncAllBlocks() {
@@ -695,6 +696,7 @@
     blocks = blocks.filter(function(b) { return b.id !== id; });
     if (selectedId === id) deselectAll();
     if (editingId === id) editingId = null;
+    if (typeof scheduleSave === 'function') scheduleSave();
   }
 
   // --- Drag guides ---
@@ -873,6 +875,7 @@
       var el = getBlockEl(editingId);
       if (el) b.text = el.querySelector('.block-content').innerText;
     }
+    scheduleSave();
   });
 
   // Double-click empty workspace area → add block at that position
@@ -1202,12 +1205,69 @@
     return true;
   }
 
+  // --- Local storage persistence ---
+  var STORAGE_KEY = 'placard_state';
+
+  function saveToStorage() {
+    // Sync text from DOM before saving
+    blocks.forEach(function(b) {
+      var el = getBlockEl(b.id);
+      if (el) b.text = el.querySelector('.block-content').innerText;
+    });
+    try {
+      localStorage.setItem(STORAGE_KEY, encodeState());
+    } catch(e) {}
+  }
+
+  function loadFromStorage() {
+    try {
+      var saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return false;
+      var s = decodeState(saved);
+      if (!s) return false;
+      if (s.bg) state.bg = s.bg;
+      if (s.fg) state.fg = s.fg;
+      if (s.sw && s.sh) {
+        state.w = s.sw;
+        state.h = s.sh;
+        var preset = s.sw + 'x' + s.sh;
+        var found = false;
+        var chips = sizeChips.querySelectorAll('.chip');
+        for (var i = 0; i < chips.length; i++) {
+          if (chips[i].dataset.w + 'x' + chips[i].dataset.h === preset) { found = true; break; }
+        }
+        state.sizePreset = found ? preset : 'custom';
+        if (!found) { customW.value = s.sw; customH.value = s.sh; }
+        updateSizeChipUI(state.sizePreset);
+      }
+      updatePaletteChipUI();
+      if (s.b && s.b.length) {
+        for (var i = 0; i < s.b.length; i++) {
+          var sb = s.b[i];
+          addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, font: sb.f, bold: sb.bo !== false, italic: sb.it || false, vertical: sb.v || false, text: sb.t });
+        }
+      }
+      deselectAll();
+      updateWorkspaceSize();
+      return true;
+    } catch(e) { return false; }
+  }
+
+  // Debounced auto-save
+  var saveTimer = null;
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveToStorage, 300);
+  }
+
   // --- Init ---
   updateWorkspaceSize();
   if (!loadFromHash()) {
-    // Start with one empty block
-    addBlock();
-    deselectAll();
+    if (!loadFromStorage()) {
+      // Start with one empty block
+      addBlock();
+      deselectAll();
+    }
   }
 
   window.addEventListener('resize', function() { updateWorkspaceSize(); });
