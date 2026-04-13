@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Placard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100..900&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #ffffff;
@@ -255,6 +252,17 @@
     padding: 0.3rem 0.2rem;
     font-size: 0.82rem;
   }
+  .block-controls select {
+    padding: 0.3rem 0.4rem;
+    font-size: 0.82rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    font-family: inherit;
+    max-width: 150px;
+  }
   .block-controls input[type="range"] {
     width: 80px;
     accent-color: var(--accent);
@@ -424,6 +432,7 @@
     <button class="btn-secondary" id="addBlockBtn">+ Add text</button>
     <div class="block-controls" id="blockControls">
       <span class="separator"></span>
+      <select id="fontSelect"></select>
       <label class="inline-label">Weight <input type="range" id="weightSlider" min="100" max="900" step="1" value="700"> <span class="weight-label" id="weightLabel">700</span></label>
       <label class="inline-label">Size <button class="btn-icon" id="fontDec">&minus;</button>
       <input type="number" id="fontSizeInput" min="8" max="400" value="56">
@@ -480,8 +489,57 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  var FONT_FAMILY = '"Noto Sans TC", sans-serif';
-  var GFONT_EXPORT = 'Noto+Sans+TC:wght@100..900';
+  // --- System font detection ---
+  var CJK_FONTS = [
+    // macOS
+    { name: 'PingFang TC', label: 'PingFang TC' },
+    { name: 'PingFang SC', label: 'PingFang SC' },
+    { name: 'PingFang HK', label: 'PingFang HK' },
+    { name: 'Hiragino Sans', label: 'Hiragino Sans' },
+    { name: 'Hiragino Mincho ProN', label: 'Hiragino Mincho' },
+    { name: 'Songti TC', label: 'Songti TC' },
+    { name: 'Songti SC', label: 'Songti SC' },
+    { name: 'Kaiti TC', label: 'Kaiti TC' },
+    { name: 'Kaiti SC', label: 'Kaiti SC' },
+    // Windows
+    { name: 'Microsoft JhengHei', label: 'Microsoft JhengHei' },
+    { name: 'Microsoft YaHei', label: 'Microsoft YaHei' },
+    { name: 'PMingLiU', label: 'PMingLiU' },
+    { name: 'SimHei', label: 'SimHei' },
+    { name: 'SimSun', label: 'SimSun' },
+    { name: 'DFKai-SB', label: 'DFKai-SB (標楷體)' },
+    { name: 'Yu Gothic', label: 'Yu Gothic' },
+    { name: 'Yu Mincho', label: 'Yu Mincho' },
+    { name: 'Meiryo', label: 'Meiryo' },
+    // Linux / cross-platform
+    { name: 'Noto Sans TC', label: 'Noto Sans TC' },
+    { name: 'Noto Sans SC', label: 'Noto Sans SC' },
+    { name: 'Noto Sans CJK TC', label: 'Noto Sans CJK TC' },
+    { name: 'Noto Serif TC', label: 'Noto Serif TC' },
+    { name: 'Noto Serif SC', label: 'Noto Serif SC' },
+    { name: 'Source Han Sans TC', label: 'Source Han Sans TC' },
+    { name: 'Source Han Serif TC', label: 'Source Han Serif TC' },
+    { name: 'WenQuanYi Micro Hei', label: 'WenQuanYi Micro Hei' }
+  ];
+
+  function detectFont(name) {
+    var c = document.createElement('canvas').getContext('2d');
+    var test = '字體測試ABCabc';
+    c.font = '72px monospace';
+    var fallbackW = c.measureText(test).width;
+    c.font = '72px "' + name + '", monospace';
+    return c.measureText(test).width !== fallbackW;
+  }
+
+  var availableFonts = CJK_FONTS.filter(function(f) { return detectFont(f.name); });
+  var PREFERRED = ['Hiragino Sans', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC'];
+  var DEFAULT_FONT = 'sans-serif';
+  for (var i = 0; i < PREFERRED.length; i++) {
+    if (availableFonts.some(function(f) { return f.name === PREFERRED[i]; })) {
+      DEFAULT_FONT = PREFERRED[i]; break;
+    }
+  }
+  if (DEFAULT_FONT === 'sans-serif' && availableFonts.length) DEFAULT_FONT = availableFonts[0].name;
   var PALETTES = [
     { bg: '#002c42', fg: '#fff200' },
     { bg: '#40285d', fg: '#61ce8c' }
@@ -498,6 +556,7 @@
   var customH = document.getElementById('customH');
   var addBlockBtn = document.getElementById('addBlockBtn');
   var blockControls = document.getElementById('blockControls');
+  var fontSelect = document.getElementById('fontSelect');
   var weightSlider = document.getElementById('weightSlider');
   var weightLabel = document.getElementById('weightLabel');
   var fontSizeInput = document.getElementById('fontSizeInput');
@@ -511,10 +570,24 @@
   var shareLinkBtn = document.getElementById('shareLinkBtn');
   var toastTimer = null;
 
+  // Populate font select with detected system fonts
+  availableFonts.forEach(function(f) {
+    var opt = document.createElement('option');
+    opt.value = f.name;
+    opt.textContent = f.label;
+    fontSelect.appendChild(opt);
+  });
+  if (!availableFonts.length) {
+    var opt = document.createElement('option');
+    opt.value = 'sans-serif';
+    opt.textContent = 'Sans-serif';
+    fontSelect.appendChild(opt);
+  }
+
   // --- State ---
   var state = { bg: '#002c42', fg: '#fff200', w: 720, h: 540, sizePreset: '720x540' };
   var nextId = 1;
-  var blocks = []; // {id, x, y, w, fontSize, weight, italic, vertical, text} — x/y/w as fraction 0..1
+  var blocks = []; // {id, x, y, w, fontSize, font, weight, italic, vertical, text} — x/y/w as fraction 0..1
   var selectedId = null;
   var editingId = null;
   var displayScale = 1;
@@ -579,6 +652,7 @@
       y: opts.y != null ? opts.y : 0.05,
       w: opts.w != null ? opts.w : 0.925,
       fontSize: opts.fontSize || 56,
+      font: opts.font || DEFAULT_FONT,
       weight: opts.weight || (opts.bold === false ? 400 : 700),
       italic: opts.italic || false,
       vertical: opts.vertical || false,
@@ -623,7 +697,7 @@
     el.style.top = (b.y * 100) + '%';
     el.style.width = (b.w * 100) + '%';
     content.style.fontSize = (b.fontSize * displayScale) + 'px';
-    content.style.fontFamily = FONT_FAMILY;
+    content.style.fontFamily = '"' + b.font + '", sans-serif';
     content.style.fontWeight = b.weight;
     content.style.fontStyle = b.italic ? 'italic' : 'normal';
     content.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
@@ -646,6 +720,7 @@
     }
     var b = findBlock(id);
     if (b) {
+      fontSelect.value = b.font;
       weightSlider.value = b.weight;
       weightLabel.textContent = b.weight;
       fontSizeInput.value = b.fontSize;
@@ -936,6 +1011,13 @@
     syncBlock(b);
   });
 
+  fontSelect.addEventListener('change', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.font = fontSelect.value;
+    syncBlock(b);
+  });
+
   weightSlider.addEventListener('input', function() {
     var b = findBlock(selectedId);
     if (!b) return;
@@ -1055,95 +1137,49 @@
     if (state.sizePreset === 'custom') setCanvasSize(state.w, parseInt(customH.value) || 100, 'custom');
   });
 
-  // --- Font embedding for SVG export ---
-  function blobToDataURI(blob) {
-    return new Promise(function(resolve) {
-      var r = new FileReader();
-      r.onloadend = function() { resolve(r.result); };
-      r.readAsDataURL(blob);
-    });
-  }
-
-  function embedFontsCSS() {
-    // Collect unique characters across all blocks
-    var chars = new Set();
-    for (var i = 0; i < blocks.length; i++) {
-      var t = blocks[i].text;
-      if (!t) continue;
-      for (var j = 0; j < t.length; j++) chars.add(t[j]);
-    }
-    if (!chars.size) return Promise.resolve('');
-
-    var text = Array.from(chars).join('');
-    var url = 'https://fonts.googleapis.com/css2?family=' + GFONT_EXPORT + '&text=' + encodeURIComponent(text) + '&display=swap';
-
-    return fetch(url).then(function(r) { return r.text(); }).then(function(css) {
-      // Collect all font URLs
-      var urlRegex = /url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/g;
-      var urls = [], m;
-      while ((m = urlRegex.exec(css)) !== null) urls.push(m[1]);
-      var unique = urls.filter(function(u, i) { return urls.indexOf(u) === i; });
-      if (!unique.length) return css;
-      // Fetch each woff2 and convert to data URI
-      return Promise.all(unique.map(function(u) {
-        return fetch(u).then(function(r) { return r.blob(); }).then(blobToDataURI).catch(function() { return null; });
-      })).then(function(dataURIs) {
-        for (var i = 0; i < unique.length; i++) {
-          if (dataURIs[i]) css = css.split(unique[i]).join(dataURIs[i]);
-        }
-        return css;
-      });
-    }).catch(function() { return ''; });
-  }
-
   // --- Export via SVG foreignObject (uses the browser's own CSS renderer) ---
   function renderToCanvas() {
-    return embedFontsCSS().then(function(fontCSS) {
-      // Build an XHTML fragment identical to the workspace at full canvas resolution
-      var wrapper = document.createElement('div');
-      wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-      wrapper.style.cssText = 'width:'+state.w+'px;height:'+state.h+'px;background:'+state.bg+';position:relative;overflow:hidden;';
+    var wrapper = document.createElement('div');
+    wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    wrapper.style.cssText = 'width:'+state.w+'px;height:'+state.h+'px;background:'+state.bg+';position:relative;overflow:hidden;';
 
-      for (var i = 0; i < blocks.length; i++) {
-        var b = blocks[i];
-        if (!b.text) continue;
-        var div = document.createElement('div');
-        div.style.position = 'absolute';
-        div.style.left = (b.x * state.w) + 'px';
-        div.style.top = (b.y * state.h) + 'px';
-        div.style.width = (b.w * state.w) + 'px';
-        div.style.fontSize = b.fontSize + 'px';
-        div.style.fontFamily = FONT_FAMILY;
-        div.style.fontWeight = b.weight;
-        div.style.fontStyle = b.italic ? 'italic' : 'normal';
-        div.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
-        div.style.color = state.fg;
-        div.style.whiteSpace = 'pre-wrap';
-        div.style.wordBreak = 'break-word';
-        div.style.lineHeight = '1.125';
-        div.style.padding = '2px';
-        div.textContent = b.text;
-        wrapper.appendChild(div);
-      }
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i];
+      if (!b.text) continue;
+      var div = document.createElement('div');
+      div.style.position = 'absolute';
+      div.style.left = (b.x * state.w) + 'px';
+      div.style.top = (b.y * state.h) + 'px';
+      div.style.width = (b.w * state.w) + 'px';
+      div.style.fontSize = b.fontSize + 'px';
+      div.style.fontFamily = '"' + b.font + '", sans-serif';
+      div.style.fontWeight = b.weight;
+      div.style.fontStyle = b.italic ? 'italic' : 'normal';
+      div.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
+      div.style.color = state.fg;
+      div.style.whiteSpace = 'pre-wrap';
+      div.style.wordBreak = 'break-word';
+      div.style.lineHeight = '1.125';
+      div.style.padding = '2px';
+      div.textContent = b.text;
+      wrapper.appendChild(div);
+    }
 
-      var serialized = new XMLSerializer().serializeToString(wrapper);
-      var styleTag = fontCSS ? '<style>' + fontCSS + '</style>' : '';
-      var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="'+state.w+'" height="'+state.h+'">' +
-        styleTag +
-        '<foreignObject width="100%" height="100%">' + serialized + '</foreignObject></svg>';
+    var serialized = new XMLSerializer().serializeToString(wrapper);
+    var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="'+state.w+'" height="'+state.h+'">' +
+      '<foreignObject width="100%" height="100%">' + serialized + '</foreignObject></svg>';
 
-      return new Promise(function(resolve, reject) {
-        var img = new Image();
-        img.onload = function() {
-          var c = document.createElement('canvas');
-          c.width = state.w;
-          c.height = state.h;
-          c.getContext('2d').drawImage(img, 0, 0);
-          resolve(c);
-        };
-        img.onerror = function() { reject(new Error('Render failed')); };
-        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
-      });
+    return new Promise(function(resolve, reject) {
+      var img = new Image();
+      img.onload = function() {
+        var c = document.createElement('canvas');
+        c.width = state.w;
+        c.height = state.h;
+        c.getContext('2d').drawImage(img, 0, 0);
+        resolve(c);
+      };
+      img.onerror = function() { reject(new Error('Render failed')); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
     });
   }
 
@@ -1175,7 +1211,7 @@
       fg: state.fg,
       sw: state.w,
       sh: state.h,
-      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, fs: b.fontSize, wt: b.weight, it: b.italic, v: b.vertical, t: b.text }; })
+      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, fs: b.fontSize, f: b.font, wt: b.weight, it: b.italic, v: b.vertical, t: b.text }; })
     };
     return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
   }
@@ -1223,7 +1259,7 @@
     if (s.b && s.b.length) {
       for (var i = 0; i < s.b.length; i++) {
         var sb = s.b[i];
-        addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
+        addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
       }
     }
     deselectAll();
@@ -1270,7 +1306,7 @@
       if (s.b && s.b.length) {
         for (var i = 0; i < s.b.length; i++) {
           var sb = s.b[i];
-          addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
+          addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
         }
       }
       deselectAll();
