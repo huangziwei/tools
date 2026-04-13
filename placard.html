@@ -315,15 +315,17 @@
   .text-block {
     position: absolute;
     cursor: move;
-    border: 2px dashed transparent;
-    transition: border-color 0.1s;
+    outline: 2px dashed transparent;
+    outline-offset: -1px;
+    transition: outline-color 0.1s;
     z-index: 1;
   }
   .text-block:hover {
-    border-color: var(--block-border-hover);
+    outline-color: var(--block-border-hover);
   }
   .text-block.selected {
-    border: 2px solid var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
   }
   .text-block.editing {
     cursor: default;
@@ -334,7 +336,6 @@
     word-break: break-word;
     min-height: 1em;
     line-height: 1.125;
-    padding: 2px;
     color: transparent;
     caret-color: var(--accent);
   }
@@ -609,7 +610,7 @@
   // --- State ---
   var state = { bg: '#002c42', fg: '#fff200', w: 720, h: 540, sizePreset: '720x540' };
   var nextId = 1;
-  var blocks = []; // {id, x, y, w, fontSize, font, weight, italic, vertical, text} — x/y/w as fraction 0..1
+  var blocks = []; // {id, x, y, w, h, fontSize, font, weight, italic, vertical, text} — x/y/w/h as fraction 0..1
   var selectedId = null;
   var editingId = null;
   var displayScale = 1;
@@ -673,6 +674,7 @@
       x: opts.x != null ? opts.x : 0.0375,
       y: opts.y != null ? opts.y : 0.05,
       w: opts.w != null ? opts.w : 0,
+      h: opts.h != null ? opts.h : 0,
       fontSize: opts.fontSize || 56,
       font: opts.font || DEFAULT_FONT,
       weight: opts.weight || (opts.bold === false ? 400 : 700),
@@ -719,6 +721,7 @@
     el.style.left = (b.x * 100) + '%';
     el.style.top = (b.y * 100) + '%';
     el.style.width = (b.w * 100) + '%';
+    el.style.height = b.h ? (b.h * 100) + '%' : 'auto';
     content.style.fontSize = (b.fontSize * displayScale) + 'px';
     content.style.fontFamily = '"' + b.font + '", sans-serif';
     content.style.fontWeight = b.weight;
@@ -738,16 +741,19 @@
     if (!el) return;
     var content = el.querySelector('.block-content');
     var wsRect = workspace.getBoundingClientRect();
-    // Let content flow at max width so we can measure its natural size
+    // Let content flow freely so we can measure its natural size
     el.style.width = wsRect.width + 'px';
+    el.style.height = 'auto';
     content.style.width = 'max-content';
     var cRect = content.getBoundingClientRect();
     content.style.width = '';
     var newW = (cRect.width + 4) / wsRect.width;
+    var newH = (cRect.height + 4) / wsRect.height;
     // Minimum: roughly one character
     var minW = (b.fontSize * displayScale + 4) / wsRect.width;
-    newW = Math.max(minW, Math.min(1, newW));
-    b.w = newW;
+    var minH = (b.fontSize * displayScale + 4) / wsRect.height;
+    b.w = Math.max(minW, Math.min(1, newW));
+    b.h = Math.max(minH, Math.min(1, newH));
     syncBlock(b);
   }
 
@@ -923,7 +929,7 @@
     if (e.target.closest('.block-resize')) {
       e.preventDefault();
       var b = findBlock(id);
-      dragState = { type: 'resize', blockId: id, startX: e.clientX, startY: e.clientY, origW: b.w, moved: false };
+      dragState = { type: 'resize', blockId: id, startX: e.clientX, startY: e.clientY, origW: b.w, origH: b.h || (getBlockEl(id).getBoundingClientRect().height / workspace.getBoundingClientRect().height), moved: false };
       workspace.setPointerCapture(e.pointerId);
       return;
     }
@@ -972,6 +978,8 @@
     } else if (dragState.type === 'resize') {
       b.w = dragState.origW + dx / rect.width;
       b.w = Math.max(0.05, Math.min(1, b.w));
+      b.h = dragState.origH + dy / rect.height;
+      b.h = Math.max(0.05, Math.min(1, b.h));
       syncBlock(b);
       showGuides(b);
     }
@@ -1184,8 +1192,8 @@
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
       if (!b.text || b.id === skipId) continue;
-      var bx = (b.x * state.w + 2) * scale;  // +2 matches content padding
-      var by = (b.y * state.h + 2) * scale;
+      var bx = b.x * state.w * scale;
+      var by = b.y * state.h * scale;
       var bw = b.w * state.w * scale;
       var fs = b.fontSize * scale;
       var lh = fs * 1.125;
@@ -1198,13 +1206,10 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         var colW = fs * 1.125;
+        var bw = b.w * state.w * scale;
         var lines = b.text.split('\n');
-        // vertical-rl: first column at right edge, moving left
-        var nCols = 0;
-        for (var li = 0; li < lines.length; li++) {
-          if (lines[li] || li < lines.length - 1) nCols++;
-        }
-        var colX = bx + (nCols - 1) * colW + colW / 2;
+        // vertical-rl: first column at right edge of block, moving left
+        var colX = bx + bw - colW / 2;
         for (var li = 0; li < lines.length; li++) {
           var line = lines[li];
           if (!line && li < lines.length - 1) { colX -= colW; continue; }
@@ -1272,7 +1277,7 @@
       fg: state.fg,
       sw: state.w,
       sh: state.h,
-      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, fs: b.fontSize, f: b.font, wt: b.weight, it: b.italic, v: b.vertical, t: b.text }; })
+      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, h: b.h, fs: b.fontSize, f: b.font, wt: b.weight, it: b.italic, v: b.vertical, t: b.text }; })
     };
     return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
   }
@@ -1320,7 +1325,7 @@
     if (s.b && s.b.length) {
       for (var i = 0; i < s.b.length; i++) {
         var sb = s.b[i];
-        addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
+        addBlock({ x: sb.x, y: sb.y, w: sb.w, h: sb.h, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
       }
     }
     deselectAll();
@@ -1367,7 +1372,7 @@
       if (s.b && s.b.length) {
         for (var i = 0; i < s.b.length; i++) {
           var sb = s.b[i];
-          addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
+          addBlock({ x: sb.x, y: sb.y, w: sb.w, h: sb.h, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
         }
       }
       deselectAll();
