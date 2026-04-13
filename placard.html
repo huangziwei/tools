@@ -303,12 +303,21 @@
     border-color: var(--accent);
   }
 
-  /* --- Text blocks --- */
+  /* --- Preview canvas --- */
+  #previewCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  /* --- Text blocks (interaction overlays) --- */
   .text-block {
     position: absolute;
     cursor: move;
     border: 2px dashed transparent;
     transition: border-color 0.1s;
+    z-index: 1;
   }
   .text-block:hover {
     border-color: var(--block-border-hover);
@@ -326,6 +335,11 @@
     min-height: 1em;
     line-height: 1.125;
     padding: 2px;
+    color: transparent;
+    caret-color: var(--accent);
+  }
+  .text-block.editing .block-content {
+    color: inherit;
   }
   .block-delete {
     position: absolute;
@@ -424,6 +438,7 @@
 
   <div class="workspace-wrap">
     <div class="workspace" id="workspace">
+      <canvas id="previewCanvas"></canvas>
       <div class="drag-guides" id="dragGuides"></div>
     </div>
   </div>
@@ -552,6 +567,7 @@
   ];
 
   var workspace = document.getElementById('workspace');
+  var previewCanvas = document.getElementById('previewCanvas');
   var paletteChips = document.getElementById('paletteChips');
   var swapColorsBtn = document.getElementById('swapColors');
   var bgColorInput = document.getElementById('bgColorInput');
@@ -708,7 +724,8 @@
     content.style.fontWeight = b.weight;
     content.style.fontStyle = b.italic ? 'italic' : 'normal';
     content.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
-    content.style.color = state.fg;
+    el.style.color = state.fg;
+    if (typeof renderPreview === 'function') renderPreview();
     if (typeof scheduleSave === 'function') scheduleSave();
   }
 
@@ -792,6 +809,7 @@
       if (b) b.text = content.innerText;
     }
     editingId = null;
+    renderPreview();
   }
 
   function deleteBlock(id) {
@@ -800,6 +818,7 @@
     blocks = blocks.filter(function(b) { return b.id !== id; });
     if (selectedId === id) deselectAll();
     if (editingId === id) editingId = null;
+    if (typeof renderPreview === 'function') renderPreview();
     if (typeof scheduleSave === 'function') scheduleSave();
   }
 
@@ -1155,22 +1174,19 @@
     if (state.sizePreset === 'custom') setCanvasSize(state.w, parseInt(customH.value) || 100, 'custom');
   });
 
-  // --- Export via Canvas 2D API ---
-  function renderToCanvas() {
-    var c = document.createElement('canvas');
-    c.width = state.w;
-    c.height = state.h;
-    var ctx = c.getContext('2d');
-
+  // --- Canvas 2D rendering (shared by preview and export) ---
+  function paintCanvas(ctx, w, h, scale) {
+    ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = state.bg;
-    ctx.fillRect(0, 0, state.w, state.h);
+    ctx.fillRect(0, 0, w, h);
 
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
       if (!b.text) continue;
-      var bx = b.x * state.w;
-      var by = b.y * state.h;
-      var fs = b.fontSize;
+      var bx = (b.x * state.w + 2) * scale;  // +2 matches content padding
+      var by = (b.y * state.h + 2) * scale;
+      var bw = b.w * state.w * scale;
+      var fs = b.fontSize * scale;
       var lh = fs * 1.125;
       var fontStr = (b.italic ? 'italic ' : '') + b.weight + ' ' + fs + 'px "' + b.font + '", sans-serif';
 
@@ -1178,24 +1194,27 @@
       ctx.font = fontStr;
 
       if (b.vertical) {
-        // Vertical: columns right-to-left, characters top-to-bottom
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         var colW = fs * 1.125;
         var lines = b.text.split('\n');
-        var colX = bx + colW / 2;
+        // vertical-rl: first column at right edge, moving left
+        var nCols = 0;
+        for (var li = 0; li < lines.length; li++) {
+          if (lines[li] || li < lines.length - 1) nCols++;
+        }
+        var colX = bx + (nCols - 1) * colW + colW / 2;
         for (var li = 0; li < lines.length; li++) {
           var line = lines[li];
-          if (!line && li < lines.length - 1) { colX += colW; continue; }
+          if (!line && li < lines.length - 1) { colX -= colW; continue; }
           var charY = by;
           for (var ci = 0; ci < line.length; ci++) {
             ctx.fillText(line[ci], colX, charY);
             charY += lh;
           }
-          colX += colW;
+          colX -= colW;
         }
       } else {
-        // Horizontal: lines top-to-bottom
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         var lines = b.text.split('\n');
@@ -1204,6 +1223,24 @@
         }
       }
     }
+  }
+
+  function renderPreview() {
+    var dpr = window.devicePixelRatio || 1;
+    var dw = parseInt(workspace.style.width);
+    var dh = parseInt(workspace.style.height);
+    previewCanvas.width = dw * dpr;
+    previewCanvas.height = dh * dpr;
+    var ctx = previewCanvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    paintCanvas(ctx, dw * dpr, dh * dpr, displayScale);
+  }
+
+  function renderToCanvas() {
+    var c = document.createElement('canvas');
+    c.width = state.w;
+    c.height = state.h;
+    paintCanvas(c.getContext('2d'), state.w, state.h, 1);
     return Promise.resolve(c);
   }
 
