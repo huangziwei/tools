@@ -482,7 +482,7 @@
 
   <div class="actions">
     <button class="btn-primary" id="downloadBtn">Download PNG</button>
-    <button class="btn-secondary" id="copyImgBtn">Copy image</button>
+    <button class="btn-secondary" id="copyImgBtn">Copy base64</button>
     <button class="btn-secondary" id="shareLinkBtn">Copy share link</button>
   </div>
 
@@ -1155,50 +1155,56 @@
     if (state.sizePreset === 'custom') setCanvasSize(state.w, parseInt(customH.value) || 100, 'custom');
   });
 
-  // --- Export via SVG foreignObject (uses the browser's own CSS renderer) ---
+  // --- Export via Canvas 2D API ---
   function renderToCanvas() {
-    var wrapper = document.createElement('div');
-    wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-    wrapper.style.cssText = 'width:'+state.w+'px;height:'+state.h+'px;background:'+state.bg+';position:relative;overflow:hidden;';
+    var c = document.createElement('canvas');
+    c.width = state.w;
+    c.height = state.h;
+    var ctx = c.getContext('2d');
+
+    ctx.fillStyle = state.bg;
+    ctx.fillRect(0, 0, state.w, state.h);
 
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
       if (!b.text) continue;
-      var div = document.createElement('div');
-      div.style.position = 'absolute';
-      div.style.left = (b.x * state.w) + 'px';
-      div.style.top = (b.y * state.h) + 'px';
-      div.style.width = (b.w * state.w) + 'px';
-      div.style.fontSize = b.fontSize + 'px';
-      div.style.fontFamily = '"' + b.font + '", sans-serif';
-      div.style.fontWeight = b.weight;
-      div.style.fontStyle = b.italic ? 'italic' : 'normal';
-      div.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
-      div.style.color = state.fg;
-      div.style.whiteSpace = 'pre';
-      div.style.wordBreak = 'break-word';
-      div.style.lineHeight = '1.125';
-      div.style.padding = '2px';
-      div.textContent = b.text;
-      wrapper.appendChild(div);
+      var bx = b.x * state.w;
+      var by = b.y * state.h;
+      var fs = b.fontSize;
+      var lh = fs * 1.125;
+      var fontStr = (b.italic ? 'italic ' : '') + b.weight + ' ' + fs + 'px "' + b.font + '", sans-serif';
+
+      ctx.fillStyle = state.fg;
+      ctx.font = fontStr;
+
+      if (b.vertical) {
+        // Vertical: columns right-to-left, characters top-to-bottom
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        var colW = fs * 1.125;
+        var lines = b.text.split('\n');
+        var colX = bx + colW / 2;
+        for (var li = 0; li < lines.length; li++) {
+          var line = lines[li];
+          if (!line && li < lines.length - 1) { colX += colW; continue; }
+          var charY = by;
+          for (var ci = 0; ci < line.length; ci++) {
+            ctx.fillText(line[ci], colX, charY);
+            charY += lh;
+          }
+          colX += colW;
+        }
+      } else {
+        // Horizontal: lines top-to-bottom
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        var lines = b.text.split('\n');
+        for (var li = 0; li < lines.length; li++) {
+          if (lines[li]) ctx.fillText(lines[li], bx, by + li * lh);
+        }
+      }
     }
-
-    var serialized = new XMLSerializer().serializeToString(wrapper);
-    var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="'+state.w+'" height="'+state.h+'">' +
-      '<foreignObject width="100%" height="100%">' + serialized + '</foreignObject></svg>';
-
-    return new Promise(function(resolve, reject) {
-      var img = new Image();
-      img.onload = function() {
-        var c = document.createElement('canvas');
-        c.width = state.w;
-        c.height = state.h;
-        c.getContext('2d').drawImage(img, 0, 0);
-        resolve(c);
-      };
-      img.onerror = function() { reject(new Error('Render failed')); };
-      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
-    });
+    return Promise.resolve(c);
   }
 
   // --- Download ---
@@ -1211,14 +1217,13 @@
     }).catch(function() { showToast('Export failed'); });
   });
 
-  // --- Copy image ---
+  // --- Copy base64 ---
   copyImgBtn.addEventListener('click', function() {
     renderToCanvas().then(function(c) {
-      c.toBlob(function(blob) {
-        navigator.clipboard.write([new ClipboardItem({'image/png': blob})]).then(function() {
-          showToast('Copied image');
-        }).catch(function() { showToast('Copy failed'); });
-      }, 'image/png');
+      var dataUrl = c.toDataURL('image/png');
+      navigator.clipboard.writeText(dataUrl).then(function() {
+        showToast('Copied base64');
+      }).catch(function() { showToast('Copy failed'); });
     }).catch(function() { showToast('Export failed'); });
   });
 
