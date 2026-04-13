@@ -785,6 +785,7 @@
 
   function startEditing(id) {
     editingId = id;
+    renderPreview();
     var el = getBlockEl(id);
     if (!el) return;
     el.classList.add('editing');
@@ -1175,14 +1176,14 @@
   });
 
   // --- Canvas 2D rendering (shared by preview and export) ---
-  function paintCanvas(ctx, w, h, scale) {
+  function paintCanvas(ctx, w, h, scale, skipId) {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = state.bg;
     ctx.fillRect(0, 0, w, h);
 
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
-      if (!b.text) continue;
+      if (!b.text || b.id === skipId) continue;
       var bx = (b.x * state.w + 2) * scale;  // +2 matches content padding
       var by = (b.y * state.h + 2) * scale;
       var bw = b.w * state.w * scale;
@@ -1233,7 +1234,7 @@
     previewCanvas.height = dh * dpr;
     var ctx = previewCanvas.getContext('2d');
     ctx.scale(dpr, dpr);
-    paintCanvas(ctx, dw * dpr, dh * dpr, displayScale);
+    paintCanvas(ctx, dw * dpr, dh * dpr, displayScale, editingId);
   }
 
   function renderToCanvas() {
