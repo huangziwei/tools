@@ -650,7 +650,7 @@
       id: nextId++,
       x: opts.x != null ? opts.x : 0.0375,
       y: opts.y != null ? opts.y : 0.05,
-      w: opts.w != null ? opts.w : 0.925,
+      w: opts.w != null ? opts.w : 0,
       fontSize: opts.fontSize || 56,
       font: opts.font || DEFAULT_FONT,
       weight: opts.weight || (opts.bold === false ? 400 : 700),
@@ -662,6 +662,7 @@
     var el = createBlockEl(b);
     workspace.appendChild(el);
     syncBlock(b);
+    if (opts.w == null) autoFitBlock(b);
     selectBlock(b.id);
     return b;
   }
@@ -707,6 +708,24 @@
 
   function syncAllBlocks() {
     for (var i = 0; i < blocks.length; i++) syncBlock(blocks[i]);
+  }
+
+  function autoFitBlock(b) {
+    var el = getBlockEl(b.id);
+    if (!el) return;
+    var content = el.querySelector('.block-content');
+    var wsRect = workspace.getBoundingClientRect();
+    // Let content flow at max width so we can measure its natural size
+    el.style.width = wsRect.width + 'px';
+    content.style.width = 'max-content';
+    var cRect = content.getBoundingClientRect();
+    content.style.width = '';
+    var newW = (cRect.width + 4) / wsRect.width;
+    // Minimum: roughly one character
+    var minW = (b.fontSize * displayScale + 4) / wsRect.width;
+    newW = Math.max(minW, Math.min(1, newW));
+    b.w = newW;
+    syncBlock(b);
   }
 
   function selectBlock(id) {
@@ -961,6 +980,7 @@
     if (b) {
       var el = getBlockEl(editingId);
       if (el) b.text = el.querySelector('.block-content').innerText;
+      autoFitBlock(b);
     }
     scheduleSave();
   });
@@ -971,7 +991,7 @@
     var rect = workspace.getBoundingClientRect();
     var x = (e.clientX - rect.left) / rect.width;
     var y = (e.clientY - rect.top) / rect.height;
-    addBlock({ x: x, y: y, w: Math.min(0.925, 1 - x - 0.02) });
+    addBlock({ x: x, y: y });
   });
 
   // Click outside workspace to deselect
@@ -1040,20 +1060,7 @@
     b.vertical = !b.vertical;
     verticalToggle.classList.toggle('active', b.vertical);
     syncBlock(b);
-    // Auto-fit block width to content after writing-mode change
-    var el = getBlockEl(b.id);
-    if (el) {
-      var content = el.querySelector('.block-content');
-      var rect = workspace.getBoundingClientRect();
-      // Temporarily let the block be as wide as possible so content can reflow
-      el.style.width = '100%';
-      // Force layout, then measure the content's natural size
-      var cRect = content.getBoundingClientRect();
-      var newW = (cRect.width + 4) / rect.width; // small padding to avoid clipping
-      newW = Math.max(0.05, Math.min(1, newW));
-      b.w = newW;
-      syncBlock(b);
-    }
+    autoFitBlock(b);
   });
 
   deleteBlockBtn.addEventListener('click', function() {
