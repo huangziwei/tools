@@ -1058,96 +1058,72 @@
     if (state.sizePreset === 'custom') setCanvasSize(state.w, parseInt(customH.value) || 100, 'custom');
   });
 
-  // --- Export to canvas ---
-  function wrapText(ctx, text, maxWidth) {
-    var lines = text.split('\n');
-    var result = [];
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      if (line === '') { result.push(''); continue; }
-      var current = '';
-      for (var j = 0; j < line.length; j++) {
-        var ch = line[j];
-        var test = current + ch;
-        if (ctx.measureText(test).width > maxWidth && current) {
-          result.push(current);
-          current = ch;
-        } else {
-          current = test;
-        }
-      }
-      if (current) result.push(current);
-    }
-    return result;
-  }
-
+  // --- Export via SVG foreignObject (uses the browser's own CSS renderer) ---
   function renderToCanvas() {
-    var c = document.createElement('canvas');
-    c.width = state.w;
-    c.height = state.h;
-    var ctx = c.getContext('2d');
-
-    ctx.fillStyle = state.bg;
-    ctx.fillRect(0, 0, state.w, state.h);
+    // Build an XHTML fragment identical to the workspace at full canvas resolution
+    var wrapper = document.createElement('div');
+    wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    wrapper.style.cssText = 'width:'+state.w+'px;height:'+state.h+'px;background:'+state.bg+';position:relative;overflow:hidden;';
 
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
       if (!b.text) continue;
-      var bx = b.x * state.w;
-      var by = b.y * state.h;
-      var bw = b.w * state.w;
-      var fs = b.fontSize;
-      var lh = fs * 1.125;
-
-      ctx.fillStyle = state.fg;
-      var fontStyle = (b.italic ? 'italic ' : '') + (b.bold ? 'bold ' : '') + fs + 'px ' + (FONTS[b.font] || FONTS.sans);
-      ctx.font = fontStyle;
-      ctx.textBaseline = 'top';
-
-      if (b.vertical) {
-        ctx.textAlign = 'center';
-        var colW = lh;
-        var colX = bx + bw - colW;
-        var charY = by;
-        var text = b.text;
-        for (var j = 0; j < text.length; j++) {
-          var ch = text[j];
-          if (ch === '\n') {
-            colX -= colW;
-            charY = by;
-            continue;
-          }
-          ctx.fillText(ch, colX + colW / 2, charY);
-          charY += lh;
-        }
-      } else {
-        ctx.textAlign = 'left';
-        var wrapped = wrapText(ctx, b.text, bw);
-        for (var j = 0; j < wrapped.length; j++) {
-          ctx.fillText(wrapped[j], bx, by + j * lh);
-        }
-      }
+      var div = document.createElement('div');
+      div.style.position = 'absolute';
+      div.style.left = (b.x * state.w) + 'px';
+      div.style.top = (b.y * state.h) + 'px';
+      div.style.width = (b.w * state.w) + 'px';
+      div.style.fontSize = b.fontSize + 'px';
+      div.style.fontFamily = FONTS[b.font] || FONTS.sans;
+      div.style.fontWeight = b.bold ? 'bold' : 'normal';
+      div.style.fontStyle = b.italic ? 'italic' : 'normal';
+      div.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
+      div.style.color = state.fg;
+      div.style.whiteSpace = 'pre-wrap';
+      div.style.wordBreak = 'break-word';
+      div.style.lineHeight = '1.125';
+      div.style.padding = '2px';
+      div.textContent = b.text;
+      wrapper.appendChild(div);
     }
-    return c;
+
+    var serialized = new XMLSerializer().serializeToString(wrapper);
+    var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="'+state.w+'" height="'+state.h+'">' +
+      '<foreignObject width="100%" height="100%">' + serialized + '</foreignObject></svg>';
+
+    return new Promise(function(resolve, reject) {
+      var img = new Image();
+      img.onload = function() {
+        var c = document.createElement('canvas');
+        c.width = state.w;
+        c.height = state.h;
+        c.getContext('2d').drawImage(img, 0, 0);
+        resolve(c);
+      };
+      img.onerror = function() { reject(new Error('Render failed')); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+    });
   }
 
   // --- Download ---
   downloadBtn.addEventListener('click', function() {
-    var c = renderToCanvas();
-    var a = document.createElement('a');
-    a.download = 'placard.png';
-    a.href = c.toDataURL('image/png');
-    a.click();
+    renderToCanvas().then(function(c) {
+      var a = document.createElement('a');
+      a.download = 'placard.png';
+      a.href = c.toDataURL('image/png');
+      a.click();
+    }).catch(function() { showToast('Export failed'); });
   });
 
   // --- Copy image ---
   copyImgBtn.addEventListener('click', function() {
-    var c = renderToCanvas();
-    c.toBlob(function(blob) {
-      navigator.clipboard.write([new ClipboardItem({'image/png': blob})]).then(function() {
-        showToast('Copied image');
-      }).catch(function() { showToast('Copy failed'); });
-    }, 'image/png');
+    renderToCanvas().then(function(c) {
+      c.toBlob(function(blob) {
+        navigator.clipboard.write([new ClipboardItem({'image/png': blob})]).then(function() {
+          showToast('Copied image');
+        }).catch(function() { showToast('Copy failed'); });
+      }, 'image/png');
+    }).catch(function() { showToast('Export failed'); });
   });
 
   // --- Share link ---
