@@ -764,6 +764,17 @@
     });
   });
 
+  // Global paste: Cmd/Ctrl+V works without clicking source panel first
+  document.addEventListener('paste', function(e) {
+    // Skip if user is typing in an editable field (e.g. filter input)
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || (tag === 'TEXTAREA' && document.activeElement !== htmlInput)) return;
+    if (rawHtml) return; // already has data
+    e.preventDefault();
+    var text = (e.clipboardData || window.clipboardData).getData('text');
+    if (text) setHtmlData(text);
+  });
+
   // Prevent browser opening dropped files
   window.addEventListener('dragover', function(e) { e.preventDefault(); });
   window.addEventListener('drop', function(e) { e.preventDefault(); });
