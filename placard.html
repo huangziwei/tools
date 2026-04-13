@@ -850,6 +850,20 @@
     b.vertical = !b.vertical;
     verticalToggle.classList.toggle('active', b.vertical);
     syncBlock(b);
+    // Auto-fit block width to content after writing-mode change
+    var el = getBlockEl(b.id);
+    if (el) {
+      var content = el.querySelector('.block-content');
+      var rect = workspace.getBoundingClientRect();
+      // Temporarily let the block be as wide as possible so content can reflow
+      el.style.width = '100%';
+      // Force layout, then measure the content's natural size
+      var cRect = content.getBoundingClientRect();
+      var newW = (cRect.width + 4) / rect.width; // small padding to avoid clipping
+      newW = Math.max(0.05, Math.min(1, newW));
+      b.w = newW;
+      syncBlock(b);
+    }
   });
 
   deleteBlockBtn.addEventListener('click', function() {
