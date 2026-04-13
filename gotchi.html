@@ -163,6 +163,7 @@
     display: flex;
     gap: 1.5rem;
     flex-wrap: wrap;
+    margin-top: 1rem;
   }
 
   .palette-custom {
@@ -208,7 +209,7 @@
 
   /* --- Workspace --- */
   .workspace-wrap {
-    margin-top: 1.25rem;
+    margin-top: 0;
     display: flex;
     justify-content: center;
   }
@@ -223,13 +224,14 @@
     -webkit-user-select: none;
   }
 
-  /* --- Block toolbar (above workspace) --- */
+  /* --- Block toolbar (below workspace) --- */
   .block-toolbar {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-top: 1.25rem;
+    margin-top: 0.75rem;
     min-height: 2rem;
+    flex-wrap: wrap;
   }
   .block-toolbar .separator {
     width: 1px;
@@ -379,6 +381,29 @@
   </div>
   <p class="lead">Generate karaoke-style text images.</p>
 
+  <div class="workspace-wrap">
+    <div class="workspace" id="workspace"></div>
+  </div>
+
+  <div class="block-toolbar">
+    <button class="btn-secondary" id="addBlockBtn">+ Add text</button>
+    <div class="block-controls" id="blockControls">
+      <span class="separator"></span>
+      <select id="fontSelect">
+        <option value="sans">Sans-serif</option>
+        <option value="serif">Serif</option>
+        <option value="mono">Mono</option>
+      </select>
+      <button class="btn-icon" id="fontDec">&minus;</button>
+      <input type="number" id="fontSizeInput" min="8" max="400" value="56">
+      <button class="btn-icon" id="fontInc">+</button>
+      <button class="btn-toggle active" id="boldToggle" title="Bold"><b>B</b></button>
+      <button class="btn-toggle" id="italicToggle" title="Italic"><i>I</i></button>
+      <span class="separator"></span>
+      <button class="btn-secondary" id="deleteBlockBtn">Delete</button>
+    </div>
+  </div>
+
   <div class="controls-row">
     <div>
       <label class="field-label">Palette</label>
@@ -408,29 +433,6 @@
         <input type="number" id="customH" min="100" max="4096" value="540">
       </div>
     </div>
-  </div>
-
-  <div class="block-toolbar">
-    <button class="btn-secondary" id="addBlockBtn">+ Add text</button>
-    <span class="separator"></span>
-    <div class="block-controls" id="blockControls">
-      <select id="fontSelect">
-        <option value="sans">Sans-serif</option>
-        <option value="serif">Serif</option>
-        <option value="mono">Mono</option>
-      </select>
-      <button class="btn-icon" id="fontDec">&minus;</button>
-      <input type="number" id="fontSizeInput" min="8" max="400" value="56">
-      <button class="btn-icon" id="fontInc">+</button>
-      <button class="btn-toggle active" id="boldToggle" title="Bold"><b>B</b></button>
-      <button class="btn-toggle" id="italicToggle" title="Italic"><i>I</i></button>
-      <span class="separator"></span>
-      <button class="btn-secondary" id="deleteBlockBtn">Delete</button>
-    </div>
-  </div>
-
-  <div class="workspace-wrap">
-    <div class="workspace" id="workspace"></div>
   </div>
 
   <div class="actions">
@@ -779,7 +781,7 @@
 
   // Click outside workspace to deselect
   document.addEventListener('pointerdown', function(e) {
-    if (!e.target.closest('.workspace') && !e.target.closest('.block-toolbar') && !e.target.closest('.actions')) {
+    if (!e.target.closest('.workspace') && !e.target.closest('.block-toolbar') && !e.target.closest('.controls-row') && !e.target.closest('.actions')) {
       deselectAll();
     }
   });
