@@ -399,6 +399,7 @@
       <button class="btn-icon" id="fontInc">+</button>
       <button class="btn-toggle active" id="boldToggle" title="Bold"><b>B</b></button>
       <button class="btn-toggle" id="italicToggle" title="Italic"><i>I</i></button>
+      <button class="btn-toggle" id="verticalToggle" title="Vertical text">縦</button>
       <span class="separator"></span>
       <button class="btn-secondary" id="deleteBlockBtn">Delete</button>
     </div>
@@ -476,6 +477,7 @@
   var fontInc = document.getElementById('fontInc');
   var boldToggle = document.getElementById('boldToggle');
   var italicToggle = document.getElementById('italicToggle');
+  var verticalToggle = document.getElementById('verticalToggle');
   var deleteBlockBtn = document.getElementById('deleteBlockBtn');
   var downloadBtn = document.getElementById('downloadBtn');
   var copyImgBtn = document.getElementById('copyImgBtn');
@@ -485,7 +487,7 @@
   // --- State ---
   var state = { bg: '#002c42', fg: '#fff200', w: 720, h: 540, sizePreset: '720x540' };
   var nextId = 1;
-  var blocks = []; // {id, x, y, w, fontSize, font, bold, italic, text} — x/y/w as fraction 0..1
+  var blocks = []; // {id, x, y, w, fontSize, font, bold, italic, vertical, text} — x/y/w as fraction 0..1
   var selectedId = null;
   var editingId = null;
   var displayScale = 1;
@@ -553,6 +555,7 @@
       font: opts.font || 'sans',
       bold: opts.bold !== false,
       italic: opts.italic || false,
+      vertical: opts.vertical || false,
       text: opts.text || ''
     };
     blocks.push(b);
@@ -597,6 +600,7 @@
     content.style.fontFamily = FONTS[b.font] || FONTS.sans;
     content.style.fontWeight = b.bold ? 'bold' : 'normal';
     content.style.fontStyle = b.italic ? 'italic' : 'normal';
+    content.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
     content.style.color = state.fg;
   }
 
@@ -619,6 +623,7 @@
       fontSizeInput.value = b.fontSize;
       boldToggle.classList.toggle('active', b.bold);
       italicToggle.classList.toggle('active', b.italic);
+      verticalToggle.classList.toggle('active', b.vertical);
       blockControls.classList.add('visible');
     }
   }
@@ -839,6 +844,14 @@
     syncBlock(b);
   });
 
+  verticalToggle.addEventListener('click', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.vertical = !b.vertical;
+    verticalToggle.classList.toggle('active', b.vertical);
+    syncBlock(b);
+  });
+
   deleteBlockBtn.addEventListener('click', function() {
     if (selectedId != null) deleteBlock(selectedId);
   });
@@ -965,10 +978,29 @@
       var fontStyle = (b.italic ? 'italic ' : '') + (b.bold ? 'bold ' : '') + fs + 'px ' + (FONTS[b.font] || FONTS.sans);
       ctx.font = fontStyle;
       ctx.textBaseline = 'top';
-      ctx.textAlign = 'left';
-      var wrapped = wrapText(ctx, b.text, bw);
-      for (var j = 0; j < wrapped.length; j++) {
-        ctx.fillText(wrapped[j], bx, by + j * lh);
+
+      if (b.vertical) {
+        ctx.textAlign = 'center';
+        var colW = lh;
+        var colX = bx + bw - colW;
+        var charY = by;
+        var text = b.text;
+        for (var j = 0; j < text.length; j++) {
+          var ch = text[j];
+          if (ch === '\n') {
+            colX -= colW;
+            charY = by;
+            continue;
+          }
+          ctx.fillText(ch, colX + colW / 2, charY);
+          charY += lh;
+        }
+      } else {
+        ctx.textAlign = 'left';
+        var wrapped = wrapText(ctx, b.text, bw);
+        for (var j = 0; j < wrapped.length; j++) {
+          ctx.fillText(wrapped[j], bx, by + j * lh);
+        }
       }
     }
     return c;
@@ -1000,7 +1032,7 @@
       fg: state.fg,
       sw: state.w,
       sh: state.h,
-      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, fs: b.fontSize, f: b.font, bo: b.bold, it: b.italic, t: b.text }; })
+      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, fs: b.fontSize, f: b.font, bo: b.bold, it: b.italic, v: b.vertical, t: b.text }; })
     };
     return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
   }
@@ -1048,10 +1080,11 @@
     if (s.b && s.b.length) {
       for (var i = 0; i < s.b.length; i++) {
         var sb = s.b[i];
-        addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, font: sb.f, bold: sb.bo !== false, italic: sb.it || false, text: sb.t });
+        addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, font: sb.f, bold: sb.bo !== false, italic: sb.it || false, vertical: sb.v || false, text: sb.t });
       }
     }
     deselectAll();
+    updateWorkspaceSize();
     return true;
   }
 
