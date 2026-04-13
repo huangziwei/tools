@@ -211,19 +211,48 @@
     height: 1.2rem;
     background: var(--border);
   }
-  .font-size-group {
+  .block-controls {
     display: none;
     align-items: center;
     gap: 0.3rem;
     font-size: 0.82rem;
     color: var(--muted);
   }
-  .font-size-group.visible { display: flex; }
-  .font-size-group input[type="number"] {
+  .block-controls.visible { display: flex; }
+  .block-controls input[type="number"] {
     width: 52px;
     text-align: center;
     padding: 0.3rem 0.2rem;
     font-size: 0.82rem;
+  }
+  .block-controls select {
+    padding: 0.3rem 0.4rem;
+    font-size: 0.82rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    font-family: inherit;
+  }
+  .btn-toggle {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    line-height: 1;
+    min-width: 28px;
+    text-align: center;
+  }
+  .btn-toggle:hover { border-color: var(--accent); }
+  .btn-toggle.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
   }
 
   /* --- Text blocks --- */
@@ -354,11 +383,17 @@
   <div class="block-toolbar">
     <button class="btn-secondary" id="addBlockBtn">+ Add text</button>
     <span class="separator"></span>
-    <div class="font-size-group" id="fontSizeGroup">
-      <span>Size</span>
+    <div class="block-controls" id="blockControls">
+      <select id="fontSelect">
+        <option value="sans">Sans-serif</option>
+        <option value="serif">Serif</option>
+        <option value="mono">Mono</option>
+      </select>
       <button class="btn-icon" id="fontDec">&minus;</button>
       <input type="number" id="fontSizeInput" min="8" max="400" value="56">
       <button class="btn-icon" id="fontInc">+</button>
+      <button class="btn-toggle active" id="boldToggle" title="Bold"><b>B</b></button>
+      <button class="btn-toggle" id="italicToggle" title="Italic"><i>I</i></button>
       <span class="separator"></span>
       <button class="btn-secondary" id="deleteBlockBtn">Delete</button>
     </div>
@@ -382,7 +417,11 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  var FONT_STACK = '"Microsoft JhengHei", "SimHei", "Noto Sans TC", "Noto Sans SC", "Hiragino Sans GB", "PingFang SC", sans-serif';
+  var FONTS = {
+    sans: '"Microsoft JhengHei", "SimHei", "Noto Sans TC", "Noto Sans SC", "Hiragino Sans GB", "PingFang SC", sans-serif',
+    serif: '"Noto Serif TC", "Noto Serif SC", "SimSun", "PMingLiU", Georgia, serif',
+    mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
+  };
   var THEMES = {
     dark:  { bg: '#002c42', fg: '#fff200' },
     light: { bg: '#fff200', fg: '#002c42' }
@@ -395,10 +434,13 @@
   var customW = document.getElementById('customW');
   var customH = document.getElementById('customH');
   var addBlockBtn = document.getElementById('addBlockBtn');
-  var fontSizeGroup = document.getElementById('fontSizeGroup');
+  var blockControls = document.getElementById('blockControls');
+  var fontSelect = document.getElementById('fontSelect');
   var fontSizeInput = document.getElementById('fontSizeInput');
   var fontDec = document.getElementById('fontDec');
   var fontInc = document.getElementById('fontInc');
+  var boldToggle = document.getElementById('boldToggle');
+  var italicToggle = document.getElementById('italicToggle');
   var deleteBlockBtn = document.getElementById('deleteBlockBtn');
   var downloadBtn = document.getElementById('downloadBtn');
   var copyImgBtn = document.getElementById('copyImgBtn');
@@ -408,7 +450,7 @@
   // --- State ---
   var state = { color: 'dark', w: 720, h: 540, sizePreset: '720x540' };
   var nextId = 1;
-  var blocks = []; // {id, x, y, w, fontSize, text} — x/y/w as fraction 0..1
+  var blocks = []; // {id, x, y, w, fontSize, font, bold, italic, text} — x/y/w as fraction 0..1
   var selectedId = null;
   var editingId = null;
   var displayScale = 1;
@@ -473,6 +515,9 @@
       y: opts.y != null ? opts.y : 0.05,
       w: opts.w != null ? opts.w : 0.925,
       fontSize: opts.fontSize || 56,
+      font: opts.font || 'sans',
+      bold: opts.bold !== false,
+      italic: opts.italic || false,
       text: opts.text || ''
     };
     blocks.push(b);
@@ -490,8 +535,6 @@
 
     var content = document.createElement('div');
     content.className = 'block-content';
-    content.style.fontFamily = FONT_STACK;
-    content.style.fontWeight = 'bold';
     if (b.text) content.textContent = b.text;
     el.appendChild(content);
 
@@ -517,6 +560,9 @@
     el.style.top = (b.y * 100) + '%';
     el.style.width = (b.w * 100) + '%';
     content.style.fontSize = (b.fontSize * displayScale) + 'px';
+    content.style.fontFamily = FONTS[b.font] || FONTS.sans;
+    content.style.fontWeight = b.bold ? 'bold' : 'normal';
+    content.style.fontStyle = b.italic ? 'italic' : 'normal';
     content.style.color = theme.fg;
   }
 
@@ -535,8 +581,11 @@
     }
     var b = findBlock(id);
     if (b) {
+      fontSelect.value = b.font;
       fontSizeInput.value = b.fontSize;
-      fontSizeGroup.classList.add('visible');
+      boldToggle.classList.toggle('active', b.bold);
+      italicToggle.classList.toggle('active', b.italic);
+      blockControls.classList.add('visible');
     }
   }
 
@@ -548,7 +597,7 @@
       all[i].classList.remove('selected', 'editing');
       all[i].querySelector('.block-content').contentEditable = 'false';
     }
-    fontSizeGroup.classList.remove('visible');
+    blockControls.classList.remove('visible');
   }
 
   function startEditing(id) {
@@ -733,6 +782,29 @@
     syncBlock(b);
   });
 
+  fontSelect.addEventListener('change', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.font = fontSelect.value;
+    syncBlock(b);
+  });
+
+  boldToggle.addEventListener('click', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.bold = !b.bold;
+    boldToggle.classList.toggle('active', b.bold);
+    syncBlock(b);
+  });
+
+  italicToggle.addEventListener('click', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.italic = !b.italic;
+    italicToggle.classList.toggle('active', b.italic);
+    syncBlock(b);
+  });
+
   deleteBlockBtn.addEventListener('click', function() {
     if (selectedId != null) deleteBlock(selectedId);
   });
@@ -834,7 +906,8 @@
       var lh = fs * 1.125;
 
       ctx.fillStyle = theme.fg;
-      ctx.font = 'bold ' + fs + 'px ' + FONT_STACK;
+      var fontStyle = (b.italic ? 'italic ' : '') + (b.bold ? 'bold ' : '') + fs + 'px ' + (FONTS[b.font] || FONTS.sans);
+      ctx.font = fontStyle;
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
       var wrapped = wrapText(ctx, b.text, bw);
@@ -870,7 +943,7 @@
       c: state.color,
       sw: state.w,
       sh: state.h,
-      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, fs: b.fontSize, t: b.text }; })
+      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, fs: b.fontSize, f: b.font, bo: b.bold, it: b.italic, t: b.text }; })
     };
     return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
   }
@@ -919,7 +992,7 @@
     if (s.b && s.b.length) {
       for (var i = 0; i < s.b.length; i++) {
         var sb = s.b[i];
-        addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, text: sb.t });
+        addBlock({ x: sb.x, y: sb.y, w: sb.w, fontSize: sb.fs, font: sb.f, bold: sb.bo !== false, italic: sb.it || false, text: sb.t });
       }
     }
     deselectAll();
