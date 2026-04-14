@@ -485,13 +485,13 @@
     <div>
       <label class="field-label">Size</label>
       <div class="chip-row" id="sizeChips">
-        <button class="chip active" data-w="720" data-h="540">Standard</button>
+        <button class="chip active" data-w="1440" data-h="1080">Standard</button>
         <button class="chip" data-w="custom" data-h="custom">Custom</button>
       </div>
       <div class="custom-size" id="customSize">
-        <input type="number" id="customW" min="100" max="4096" value="720">
+        <input type="number" id="customW" min="100" max="4096" value="1440">
         <span class="times">&times;</span>
-        <input type="number" id="customH" min="100" max="4096" value="540">
+        <input type="number" id="customH" min="100" max="4096" value="1080">
       </div>
     </div>
   </div>
@@ -608,7 +608,7 @@
   }
 
   // --- State ---
-  var state = { bg: '#002c42', fg: '#fff200', w: 720, h: 540, sizePreset: '720x540' };
+  var state = { bg: '#002c42', fg: '#fff200', w: 1440, h: 1080, sizePreset: '1440x1080' };
   var nextId = 1;
   var blocks = []; // {id, x, y, w, h, fontSize, font, weight, italic, vertical, text} — x/y/w/h as fraction 0..1
   var selectedId = null;
