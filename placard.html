@@ -240,12 +240,31 @@
   }
   .block-controls {
     display: none;
-    align-items: center;
-    gap: 0.3rem;
+    align-items: flex-end;
+    gap: 0.75rem;
     font-size: 0.82rem;
     color: var(--muted);
+    flex-wrap: wrap;
   }
   .block-controls.visible { display: flex; }
+  .ctrl {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    align-items: flex-start;
+  }
+  .ctrl-label {
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
   .block-controls input[type="number"] {
     width: 52px;
     text-align: center;
@@ -263,11 +282,6 @@
     font-family: inherit;
     max-width: 150px;
   }
-  .block-controls input[type="range"] {
-    width: 80px;
-    accent-color: var(--accent);
-    vertical-align: middle;
-  }
   .block-controls input[type="color"] {
     width: 26px;
     height: 22px;
@@ -283,21 +297,6 @@
   .btn-icon.active {
     border-color: var(--accent);
     color: var(--accent);
-  }
-  .inline-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.78rem;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-  .weight-label {
-    font-size: 0.78rem;
-    font-variant-numeric: tabular-nums;
-    color: var(--muted);
-    min-width: 2.2em;
-    display: inline-block;
   }
   .btn-toggle {
     padding: 0.3rem 0.5rem;
@@ -465,17 +464,45 @@
     <span style="flex:1"></span>
     <button class="btn-secondary" id="clearAllBtn" style="color:var(--muted)">Clear all</button>
     <div class="block-controls" id="blockControls">
-      <span class="separator"></span>
-      <select id="fontSelect"></select>
-      <label class="inline-label">Weight <input type="range" id="weightSlider" min="100" max="900" step="1" value="700"> <span class="weight-label" id="weightLabel">700</span></label>
-      <label class="inline-label">Size <button class="btn-icon" id="fontDec">&minus;</button>
-      <input type="number" id="fontSizeInput" min="8" max="400" value="56">
-      <button class="btn-icon" id="fontInc">+</button></label>
-      <button class="btn-toggle" id="italicToggle" title="Italic"><i>I</i></button>
-      <button class="btn-toggle" id="verticalToggle" title="Vertical text">縦</button>
-      <label class="inline-label">Color <input type="color" id="blockColorInput" title="Per-block text color"> <button class="btn-icon" id="blockColorReset" title="Reset to palette color">&#x21ba;</button></label>
-      <span class="separator"></span>
-      <button class="btn-secondary" id="deleteBlockBtn">Delete</button>
+      <div class="ctrl">
+        <span class="ctrl-label">Font</span>
+        <select id="fontSelect"></select>
+      </div>
+      <div class="ctrl">
+        <span class="ctrl-label">Weight</span>
+        <div class="ctrl-row">
+          <button class="btn-icon" id="weightDec">&minus;</button>
+          <input type="number" id="weightInput" min="100" max="900" step="100" value="700">
+          <button class="btn-icon" id="weightInc">+</button>
+        </div>
+      </div>
+      <div class="ctrl">
+        <span class="ctrl-label">Size</span>
+        <div class="ctrl-row">
+          <button class="btn-icon" id="fontDec">&minus;</button>
+          <input type="number" id="fontSizeInput" min="8" max="400" value="56">
+          <button class="btn-icon" id="fontInc">+</button>
+        </div>
+      </div>
+      <div class="ctrl">
+        <span class="ctrl-label">Italic</span>
+        <button class="btn-toggle" id="italicToggle" title="Italic"><i>I</i></button>
+      </div>
+      <div class="ctrl">
+        <span class="ctrl-label">Vertical</span>
+        <button class="btn-toggle" id="verticalToggle" title="Vertical text">縦</button>
+      </div>
+      <div class="ctrl">
+        <span class="ctrl-label">Color</span>
+        <div class="ctrl-row">
+          <input type="color" id="blockColorInput" title="Per-block text color">
+          <button class="btn-icon" id="blockColorReset" title="Reset to palette color">&#x21ba;</button>
+        </div>
+      </div>
+      <div class="ctrl">
+        <span class="ctrl-label">&nbsp;</span>
+        <button class="btn-secondary" id="deleteBlockBtn">Delete</button>
+      </div>
     </div>
   </div>
 
@@ -597,8 +624,9 @@
   var addBlockBtn = document.getElementById('addBlockBtn');
   var blockControls = document.getElementById('blockControls');
   var fontSelect = document.getElementById('fontSelect');
-  var weightSlider = document.getElementById('weightSlider');
-  var weightLabel = document.getElementById('weightLabel');
+  var weightInput = document.getElementById('weightInput');
+  var weightDec = document.getElementById('weightDec');
+  var weightInc = document.getElementById('weightInc');
   var fontSizeInput = document.getElementById('fontSizeInput');
   var fontDec = document.getElementById('fontDec');
   var fontInc = document.getElementById('fontInc');
@@ -793,8 +821,7 @@
     var b = findBlock(id);
     if (b) {
       fontSelect.value = b.font;
-      weightSlider.value = b.weight;
-      weightLabel.textContent = b.weight;
+      weightInput.value = b.weight;
       fontSizeInput.value = b.fontSize;
       italicToggle.classList.toggle('active', b.italic);
       verticalToggle.classList.toggle('active', b.vertical);
@@ -1103,11 +1130,27 @@
     syncBlock(b);
   });
 
-  weightSlider.addEventListener('input', function() {
+  weightInput.addEventListener('input', function() {
     var b = findBlock(selectedId);
     if (!b) return;
-    b.weight = parseInt(weightSlider.value);
-    weightLabel.textContent = b.weight;
+    var v = parseInt(weightInput.value) || 400;
+    b.weight = Math.max(100, Math.min(900, v));
+    syncBlock(b);
+  });
+
+  weightDec.addEventListener('click', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.weight = Math.max(100, b.weight - 100);
+    weightInput.value = b.weight;
+    syncBlock(b);
+  });
+
+  weightInc.addEventListener('click', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.weight = Math.min(900, b.weight + 100);
+    weightInput.value = b.weight;
     syncBlock(b);
   });
 
