@@ -268,6 +268,22 @@
     accent-color: var(--accent);
     vertical-align: middle;
   }
+  .block-controls input[type="color"] {
+    width: 26px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    vertical-align: middle;
+  }
+  .block-controls input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+  .block-controls input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+  .btn-icon.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
   .inline-label {
     display: inline-flex;
     align-items: center;
@@ -457,6 +473,7 @@
       <button class="btn-icon" id="fontInc">+</button></label>
       <button class="btn-toggle" id="italicToggle" title="Italic"><i>I</i></button>
       <button class="btn-toggle" id="verticalToggle" title="Vertical text">縦</button>
+      <label class="inline-label">Color <input type="color" id="blockColorInput" title="Per-block text color"> <button class="btn-icon" id="blockColorReset" title="Reset to palette color">&#x21ba;</button></label>
       <span class="separator"></span>
       <button class="btn-secondary" id="deleteBlockBtn">Delete</button>
     </div>
@@ -587,6 +604,8 @@
   var fontInc = document.getElementById('fontInc');
   var italicToggle = document.getElementById('italicToggle');
   var verticalToggle = document.getElementById('verticalToggle');
+  var blockColorInput = document.getElementById('blockColorInput');
+  var blockColorReset = document.getElementById('blockColorReset');
   var deleteBlockBtn = document.getElementById('deleteBlockBtn');
   var downloadBtn = document.getElementById('downloadBtn');
   var copyImgBtn = document.getElementById('copyImgBtn');
@@ -653,6 +672,10 @@
     workspace.style.setProperty('--block-border-hover', 'rgba('+r+','+g+','+b+',0.5)');
     bgColorInput.value = state.bg;
     fgColorInput.value = state.fg;
+    if (selectedId != null) {
+      var selB = findBlock(selectedId);
+      if (selB && !selB.color) blockColorInput.value = state.fg;
+    }
   }
 
   // --- Block management ---
@@ -680,6 +703,7 @@
       weight: opts.weight || (opts.bold === false ? 400 : 700),
       italic: opts.italic || false,
       vertical: opts.vertical || false,
+      color: opts.color || null,
       text: opts.text || ''
     };
     blocks.push(b);
@@ -727,7 +751,7 @@
     content.style.fontWeight = b.weight;
     content.style.fontStyle = b.italic ? 'italic' : 'normal';
     content.style.writingMode = b.vertical ? 'vertical-rl' : 'horizontal-tb';
-    el.style.color = state.fg;
+    el.style.color = b.color || state.fg;
     if (typeof renderPreview === 'function') renderPreview();
     if (typeof scheduleSave === 'function') scheduleSave();
   }
@@ -774,6 +798,8 @@
       fontSizeInput.value = b.fontSize;
       italicToggle.classList.toggle('active', b.italic);
       verticalToggle.classList.toggle('active', b.vertical);
+      blockColorInput.value = b.color || state.fg;
+      blockColorReset.classList.toggle('active', !!b.color);
       blockControls.classList.add('visible');
     }
   }
@@ -1102,6 +1128,23 @@
     autoFitBlock(b);
   });
 
+  blockColorInput.addEventListener('input', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.color = blockColorInput.value;
+    blockColorReset.classList.add('active');
+    syncBlock(b);
+  });
+
+  blockColorReset.addEventListener('click', function() {
+    var b = findBlock(selectedId);
+    if (!b) return;
+    b.color = null;
+    blockColorInput.value = state.fg;
+    blockColorReset.classList.remove('active');
+    syncBlock(b);
+  });
+
   deleteBlockBtn.addEventListener('click', function() {
     if (selectedId != null) deleteBlock(selectedId);
   });
@@ -1199,7 +1242,7 @@
       var lh = fs * 1.125;
       var fontStr = (b.italic ? 'italic ' : '') + b.weight + ' ' + fs + 'px "' + b.font + '", sans-serif';
 
-      ctx.fillStyle = state.fg;
+      ctx.fillStyle = b.color || state.fg;
       ctx.font = fontStr;
 
       if (b.vertical) {
@@ -1277,7 +1320,7 @@
       fg: state.fg,
       sw: state.w,
       sh: state.h,
-      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, h: b.h, fs: b.fontSize, f: b.font, wt: b.weight, it: b.italic, v: b.vertical, t: b.text }; })
+      b: blocks.map(function(b) { return { x: b.x, y: b.y, w: b.w, h: b.h, fs: b.fontSize, f: b.font, wt: b.weight, it: b.italic, v: b.vertical, c: b.color || undefined, t: b.text }; })
     };
     return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
   }
@@ -1325,7 +1368,7 @@
     if (s.b && s.b.length) {
       for (var i = 0; i < s.b.length; i++) {
         var sb = s.b[i];
-        addBlock({ x: sb.x, y: sb.y, w: sb.w, h: sb.h, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
+        addBlock({ x: sb.x, y: sb.y, w: sb.w, h: sb.h, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, color: sb.c || null, text: sb.t });
       }
     }
     deselectAll();
@@ -1372,7 +1415,7 @@
       if (s.b && s.b.length) {
         for (var i = 0; i < s.b.length; i++) {
           var sb = s.b[i];
-          addBlock({ x: sb.x, y: sb.y, w: sb.w, h: sb.h, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, text: sb.t });
+          addBlock({ x: sb.x, y: sb.y, w: sb.w, h: sb.h, fontSize: sb.fs, font: sb.f || DEFAULT_FONT, weight: sb.wt || (sb.bo === false ? 400 : 700), italic: sb.it || false, vertical: sb.v || false, color: sb.c || null, text: sb.t });
         }
       }
       deselectAll();
