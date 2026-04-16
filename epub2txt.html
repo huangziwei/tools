@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EPUB to TXT</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111418;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --border-strong: #cbd5e1;
+    --panel: #f8fafc;
+    --panel-active: #eff6ff;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #f1f5f9;
+    --info: #1e40af;
+    --info-bg: #eff6ff;
+    --info-border: #bfdbfe;
+    --success: #166534;
+    --success-bg: #f0fdf4;
+    --success-border: #bbf7d0;
+    --error: #b91c1c;
+    --error-bg: #fef2f2;
+    --error-border: #fecaca;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eaed;
+      --muted: #9aa0a6;
+      --border: #262a30;
+      --border-strong: #3a3f47;
+      --panel: #14171c;
+      --panel-active: #17253f;
+      --accent: #60a5fa;
+      --accent-hover: #93c5fd;
+      --code-bg: #1a1f26;
+      --info: #93c5fd;
+      --info-bg: #0f1a2e;
+      --info-border: #1e3a5f;
+      --success: #86efac;
+      --success-bg: #0a1f14;
+      --success-border: #166534;
+      --error: #fca5a5;
+      --error-bg: #1f0e0f;
+      --error-border: #7f1d1d;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 2rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 620px; }
+
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.5rem; }
+  h1 { font-size: 1.75rem; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+  .github-link { color: var(--muted); display: flex; }
+  .github-link:hover { color: var(--fg); text-decoration: none; }
+  p.lead {
+    color: var(--muted);
+    margin: 0 0 2rem;
+    font-size: 0.95rem;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 0.12em 0.4em;
+    border-radius: 4px;
+  }
+
+  .drop-zone {
+    display: block;
+    border: 2px dashed var(--border-strong);
+    border-radius: 12px;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    background: var(--panel);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  }
+  .drop-zone:hover {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--panel-active);
+    transform: scale(1.005);
+  }
+  .drop-zone:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .drop-icon {
+    width: 40px;
+    height: 40px;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+  }
+  .drop-text {
+    font-size: 1rem;
+    margin: 0 0 0.25rem;
+  }
+  .drop-text strong { font-weight: 600; }
+  .drop-hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .status {
+    margin-top: 1.5rem;
+    padding: 1rem 1.25rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    font-size: 0.9rem;
+    display: none;
+  }
+  .status.visible { display: block; }
+  .status.processing {
+    border-color: var(--info-border);
+    background: var(--info-bg);
+    color: var(--info);
+  }
+  .status.done {
+    border-color: var(--success-border);
+    background: var(--success-bg);
+    color: var(--success);
+  }
+  .status.error {
+    border-color: var(--error-border);
+    background: var(--error-bg);
+    color: var(--error);
+  }
+  .status-title {
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+  }
+  .status-body { margin: 0; opacity: 0.9; }
+  .status-body em { font-style: italic; }
+
+  .spinner {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    margin-right: 0.55rem;
+    vertical-align: -1px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  details {
+    margin-top: 2rem;
+    font-size: 0.875rem;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 1.25rem;
+  }
+  details summary {
+    cursor: pointer;
+    user-select: none;
+    color: var(--fg);
+    font-weight: 500;
+  }
+  details p { margin: 0.75rem 0 0; }
+  details strong { color: var(--fg); }
+
+  footer {
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="page-header">
+    <h1>EPUB to TXT</h1>
+    <!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->
+  </div>
+  <p class="lead">Extract plain text from an EPUB file in reading order.</p>
+
+  <label class="drop-zone" id="dropZone" for="fileInput">
+    <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+    </svg>
+    <p class="drop-text"><strong>Drop an EPUB here</strong> or click to choose a file</p>
+    <p class="drop-hint">Processed locally, then downloaded as <code>name.txt</code></p>
+    <input type="file" id="fileInput" accept="application/epub+zip,.epub">
+  </label>
+
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <details>
+    <summary>About &amp; limitations</summary>
+    <p><strong>What this does:</strong> Reads the EPUB's <code>container.xml</code> to find the OPF package, walks the spine in reading order, and extracts visible text from each XHTML chapter. <code>&lt;script&gt;</code> and <code>&lt;style&gt;</code> content is dropped; block elements become paragraph breaks; chapters are separated by a blank line.</p>
+    <p><strong>What it cannot do:</strong> DRM-protected EPUBs (Adobe ADEPT, Apple FairPlay, Kindle KFX) cannot be read — they are encrypted and this tool does not break DRM. Images, tables, footnotes, and ruby annotations are stripped down to their text content.</p>
+    <p><strong>Privacy:</strong> Everything runs in your browser. Your file never leaves your device.</p>
+  </details>
+
+  <footer>
+    All data stays on your device.<br>
+    <!-- TOOL_META_START --><!-- TOOL_META_END -->
+    &middot; built with <a href="https://stuk.github.io/jszip/" target="_blank" rel="noopener">JSZip</a>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const statusEl = document.getElementById('status');
+
+  function setStatus(kind, title, body) {
+    statusEl.className = 'status visible ' + kind;
+    const titleHtml = kind === 'processing'
+      ? `<span class="spinner" aria-hidden="true"></span>${title}`
+      : title;
+    statusEl.innerHTML =
+      `<p class="status-title">${titleHtml}</p>` +
+      (body ? `<p class="status-body">${body}</p>` : '');
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Resolve href relative to base dir (both are zip paths, no leading slash).
+  function resolvePath(baseDir, href) {
+    href = decodeURIComponent(href.split('#')[0]);
+    if (!baseDir) return href;
+    const parts = (baseDir + '/' + href).split('/');
+    const out = [];
+    for (const p of parts) {
+      if (p === '' || p === '.') continue;
+      if (p === '..') out.pop();
+      else out.push(p);
+    }
+    return out.join('/');
+  }
+
+  function parseXml(text, label) {
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    const err = doc.querySelector('parsererror');
+    if (err) throw new Error(`Malformed XML in ${label}`);
+    return doc;
+  }
+
+  // Walk DOM, emit text with newlines at block boundaries.
+  const BLOCK = new Set([
+    'p', 'div', 'br', 'li', 'tr', 'td', 'th',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'blockquote', 'pre', 'section', 'article',
+    'header', 'footer', 'nav', 'aside', 'figure', 'figcaption',
+    'hr', 'ul', 'ol', 'dl', 'dt', 'dd', 'table'
+  ]);
+
+  function extractText(root) {
+    const parts = [];
+    const walk = (node) => {
+      if (node.nodeType === 3) {
+        parts.push(node.nodeValue);
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'script' || tag === 'style' || tag === 'rt' || tag === 'rp') return;
+      const block = BLOCK.has(tag);
+      if (block) parts.push('\n');
+      for (const child of node.childNodes) walk(child);
+      if (block) parts.push('\n');
+    };
+    walk(root);
+    return parts.join('')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  async function epubToText(file) {
+    if (!file) return;
+    if (!/\.epub$/i.test(file.name) && file.type !== 'application/epub+zip') {
+      setStatus('error', 'Not an EPUB', 'Please select a file with an <code>.epub</code> extension.');
+      return;
+    }
+
+    setStatus('processing', `Processing ${escapeHtml(file.name)}&hellip;`, 'Reading EPUB archive.');
+
+    try {
+      const zip = await JSZip.loadAsync(await file.arrayBuffer());
+
+      if (zip.file('META-INF/encryption.xml')) {
+        throw new Error('DRM_PROTECTED');
+      }
+
+      const containerEntry = zip.file('META-INF/container.xml');
+      if (!containerEntry) throw new Error('Missing META-INF/container.xml — not a valid EPUB.');
+      const containerDoc = parseXml(await containerEntry.async('string'), 'container.xml');
+      const rootfile = containerDoc.querySelector('rootfile');
+      const opfPath = rootfile && rootfile.getAttribute('full-path');
+      if (!opfPath) throw new Error('No rootfile in container.xml.');
+
+      const opfEntry = zip.file(opfPath);
+      if (!opfEntry) throw new Error(`OPF file not found at ${opfPath}.`);
+      const opfDoc = parseXml(await opfEntry.async('string'), 'OPF');
+      const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/')) : '';
+
+      const manifest = {};
+      for (const item of opfDoc.getElementsByTagName('item')) {
+        const id = item.getAttribute('id');
+        const href = item.getAttribute('href');
+        if (id && href) manifest[id] = href;
+      }
+
+      const spineRefs = [];
+      for (const ref of opfDoc.getElementsByTagName('itemref')) {
+        const idref = ref.getAttribute('idref');
+        if (idref && manifest[idref]) spineRefs.push(manifest[idref]);
+      }
+      if (!spineRefs.length) throw new Error('Empty spine — nothing to extract.');
+
+      setStatus(
+        'processing',
+        `Processing ${escapeHtml(file.name)}&hellip;`,
+        `Extracting ${spineRefs.length} chapter${spineRefs.length === 1 ? '' : 's'}.`
+      );
+
+      const chapters = [];
+      for (const href of spineRefs) {
+        const path = resolvePath(opfDir, href);
+        const entry = zip.file(path);
+        if (!entry) continue;
+        const html = await entry.async('string');
+        const doc = new DOMParser().parseFromString(html, 'application/xhtml+xml');
+        // Fallback to HTML parsing if XHTML parse failed (non-strict EPUBs).
+        const body = (doc.querySelector('parsererror')
+          ? new DOMParser().parseFromString(html, 'text/html')
+          : doc).body || doc.documentElement;
+        const text = extractText(body);
+        if (text) chapters.push(text);
+      }
+
+      if (!chapters.length) throw new Error('No readable text found in spine.');
+
+      const titleEl = opfDoc.getElementsByTagName('dc:title')[0] || opfDoc.querySelector('title');
+      const bookTitle = titleEl ? titleEl.textContent.trim() : '';
+      const header = bookTitle ? bookTitle + '\n\n' : '';
+      const output = header + chapters.join('\n\n');
+
+      const baseName = file.name.replace(/\.epub$/i, '');
+      const outName = `${baseName}.txt`;
+
+      const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = outName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+      const sizeKB = (new Blob([output]).size / 1024).toFixed(1);
+      setStatus(
+        'done',
+        `Done &mdash; downloaded ${escapeHtml(outName)}`,
+        `${chapters.length} chapter${chapters.length === 1 ? '' : 's'} &middot; ${sizeKB}&nbsp;KB`
+      );
+    } catch (err) {
+      console.error(err);
+      const msg = (err && err.message) ? err.message : String(err);
+      if (msg === 'DRM_PROTECTED') {
+        setStatus(
+          'error',
+          'This EPUB is DRM-protected',
+          'The file contains an <code>encryption.xml</code> manifest. DRM removal is out of scope for this tool.'
+        );
+      } else {
+        setStatus('error', 'Could not process this EPUB', escapeHtml(msg));
+      }
+    }
+  }
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) epubToText(file);
+    fileInput.value = '';
+  });
+
+  ['dragenter', 'dragover'].forEach((name) => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach((name) => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+    });
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) epubToText(file);
+  });
+
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
+</script>
+</body>
+</html>
