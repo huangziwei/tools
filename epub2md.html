@@ -233,7 +233,7 @@
     <summary>About &amp; limitations</summary>
     <p><strong>What this does:</strong> Reads the EPUB's <code>container.xml</code> to find the OPF package, walks the spine in reading order, and emits Markdown.</p>
     <p><strong>Preserved:</strong> headings, paragraphs, bold, italic, strikethrough (<code>~~x~~</code>), superscript / subscript (<code>^x^</code> / <code>~x~</code>), inline code, fenced code blocks, lists (nested), blockquotes, links, tables, horizontal rules, and footnotes (<code>[^id]</code>) when the source uses EPUB <code>epub:type="noteref"</code> / <code>epub:type="footnote"</code> attributes.</p>
-    <p><strong>TOC links:</strong> cross-chapter links like <code>&lt;a href="chapter01.html#sec2"&gt;</code> are rewritten to same-document heading anchors. The renderer resolves fragments to the slug of the nearest enclosing heading (or the chapter's first heading if nothing matches). When a headingless chapter's title is encoded as an image and its <code>alt</code> matches a link text pointing at that chapter, the image is promoted to a level-2 heading so the TOC resolves.</p>
+    <p><strong>TOC links:</strong> cross-chapter links like <code>&lt;a href="chapter01.html#sec2"&gt;</code> are rewritten to same-document heading anchors. The renderer resolves fragments to the slug of the nearest enclosing heading (or the chapter's first heading if nothing matches). When a headingless chapter's title is encoded as an image or styled prose and its text matches a link pointing at that chapter, that element is promoted to a level-2 heading so the TOC resolves.</p>
     <p><strong>Images:</strong> emitted as <code>![alt](images/filename)</code>. If the EPUB contains referenced images, the output is a <code>.zip</code> containing the <code>.md</code> alongside an <code>images/</code> folder so the links resolve. Books with no images download as a single <code>.md</code>. Basenames are deduplicated across chapters.</p>
     <p><strong>Stripped:</strong> ruby / furigana (base text kept, reading dropped), underlines, font-size changes, SVG, MathML, arbitrary CSS styling, and any HTML with no Markdown equivalent.</p>
     <p><strong>DRM:</strong> DRM-protected EPUBs (Adobe ADEPT, Apple FairPlay, Kindle KFX) cannot be read.</p>
@@ -703,13 +703,24 @@
         }
       }
 
-      // When a chapter has no headings but contains an image whose alt text
-      // matches a TOC entry pointing at it, the alt is the intended chapter
-      // title. Swap the img for an <h2> so the TOC link resolves to a slug.
+      // When a chapter has no semantic headings but a TOC entry points at it,
+      // promote whatever element holds the title text into an <h2> so the TOC
+      // link can resolve to a slug. Two cases, tried in order:
+      //   (a) an <img> whose alt matches the TOC text (common in light novels
+      //       where chapter titles are typeset as images),
+      //   (b) a block element whose text exactly matches the TOC text (the
+      //       title is styled prose like <p class="chapter-title">あとがき</p>).
+      const blockTags = new Set([
+        'p', 'div', 'section', 'article', 'header', 'footer',
+        'nav', 'aside', 'main', 'blockquote', 'figure', 'figcaption',
+      ]);
       for (const c of parsedChapters) {
         const titles = tocTitleMap[c.path];
         if (!titles) continue;
         if (c.body.querySelector('h1, h2, h3, h4, h5, h6')) continue;
+
+        // (a) Image-as-title.
+        let promoted = false;
         for (const img of Array.from(c.body.getElementsByTagName('img'))) {
           const alt = (img.getAttribute('alt') || '').replace(/\s+/g, ' ').trim();
           if (!alt || !titles.has(alt)) continue;
@@ -728,6 +739,30 @@
             h.id = img.id;
           }
           target.parentNode.replaceChild(h, target);
+          promoted = true;
+          break;
+        }
+        if (promoted) continue;
+
+        // (b) Text-as-title. Find the first block element whose trimmed text
+        // exactly equals a TOC entry, then drill down into same-text children
+        // to promote the smallest wrapper (e.g. <strong> inside a <p>).
+        for (const el of c.body.querySelectorAll('*')) {
+          if (!blockTags.has(el.tagName.toLowerCase())) continue;
+          const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!text || !titles.has(text)) continue;
+          let inner = el;
+          drill: while (true) {
+            for (const child of inner.children) {
+              const ct = (child.textContent || '').replace(/\s+/g, ' ').trim();
+              if (ct === text) { inner = child; continue drill; }
+            }
+            break;
+          }
+          const h = inner.ownerDocument.createElementNS(inner.namespaceURI, 'h2');
+          h.textContent = text;
+          if (inner.id) h.id = inner.id;
+          inner.parentNode.replaceChild(h, inner);
           break;
         }
       }
