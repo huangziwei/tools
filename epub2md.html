@@ -233,7 +233,7 @@
     <summary>About &amp; limitations</summary>
     <p><strong>What this does:</strong> Reads the EPUB's <code>container.xml</code> to find the OPF package, walks the spine in reading order, and emits Markdown.</p>
     <p><strong>Preserved:</strong> headings, paragraphs, bold, italic, strikethrough (<code>~~x~~</code>), superscript / subscript (<code>^x^</code> / <code>~x~</code>), inline code, fenced code blocks, lists (nested), blockquotes, links, tables, horizontal rules, and footnotes (<code>[^id]</code>) when the source uses EPUB <code>epub:type="noteref"</code> / <code>epub:type="footnote"</code> attributes.</p>
-    <p><strong>TOC links:</strong> cross-chapter links like <code>&lt;a href="chapter01.html#sec2"&gt;</code> are rewritten to same-document heading anchors. The renderer resolves fragments to the slug of the nearest enclosing heading (or the chapter's first heading if nothing matches). Chapters with no heading have no anchor — links to them won't resolve.</p>
+    <p><strong>TOC links:</strong> cross-chapter links like <code>&lt;a href="chapter01.html#sec2"&gt;</code> are rewritten to same-document heading anchors. The renderer resolves fragments to the slug of the nearest enclosing heading (or the chapter's first heading if nothing matches). When a headingless chapter's title is encoded as an image and its <code>alt</code> matches a link text pointing at that chapter, the image is promoted to a level-2 heading so the TOC resolves.</p>
     <p><strong>Images:</strong> emitted as <code>![alt](images/filename)</code>. If the EPUB contains referenced images, the output is a <code>.zip</code> containing the <code>.md</code> alongside an <code>images/</code> folder so the links resolve. Books with no images download as a single <code>.md</code>. Basenames are deduplicated across chapters.</p>
     <p><strong>Stripped:</strong> ruby / furigana (base text kept, reading dropped), underlines, font-size changes, SVG, MathML, arbitrary CSS styling, and any HTML with no Markdown equivalent.</p>
     <p><strong>DRM:</strong> DRM-protected EPUBs (Adobe ADEPT, Apple FairPlay, Kindle KFX) cannot be read.</p>
@@ -681,6 +681,55 @@
           : doc).body || doc.documentElement;
         const chapterDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
         parsedChapters.push({ path, body, chapterDir });
+      }
+
+      // Build a per-target map of visible link text from every cross-chapter
+      // anchor in the book. This is a proxy for the table of contents: if a
+      // link with text "Prologue" points at p-001.xhtml, then "Prologue" is
+      // a title candidate for that chapter.
+      const tocTitleMap = {};
+      for (const c of parsedChapters) {
+        for (const a of c.body.getElementsByTagName('a')) {
+          const href = a.getAttribute('href') || '';
+          if (!href) continue;
+          if (/^[a-z][a-z0-9+\-.]*:/i.test(href) || href.startsWith('//') || href.startsWith('#')) continue;
+          let targetPath;
+          try { targetPath = resolvePath(c.chapterDir, href); }
+          catch (_) { continue; }
+          const text = (a.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!text) continue;
+          if (!tocTitleMap[targetPath]) tocTitleMap[targetPath] = new Set();
+          tocTitleMap[targetPath].add(text);
+        }
+      }
+
+      // When a chapter has no headings but contains an image whose alt text
+      // matches a TOC entry pointing at it, the alt is the intended chapter
+      // title. Swap the img for an <h2> so the TOC link resolves to a slug.
+      for (const c of parsedChapters) {
+        const titles = tocTitleMap[c.path];
+        if (!titles) continue;
+        if (c.body.querySelector('h1, h2, h3, h4, h5, h6')) continue;
+        for (const img of Array.from(c.body.getElementsByTagName('img'))) {
+          const alt = (img.getAttribute('alt') || '').replace(/\s+/g, ' ').trim();
+          if (!alt || !titles.has(alt)) continue;
+          const h = img.ownerDocument.createElementNS(img.namespaceURI, 'h2');
+          h.textContent = alt;
+          // If the img is wrapped in an <a> (often the TOC-target anchor),
+          // replace the whole anchor so its id moves onto the heading and
+          // we don't end up with [## Title](#...) after render.
+          let target = img;
+          const parent = img.parentNode;
+          if (parent && parent.tagName && parent.tagName.toLowerCase() === 'a') {
+            if (parent.id) h.id = parent.id;
+            else if (img.id) h.id = img.id;
+            target = parent;
+          } else if (img.id) {
+            h.id = img.id;
+          }
+          target.parentNode.replaceChild(h, target);
+          break;
+        }
       }
 
       // chapter-path → { firstSlug, map: source-id → heading-slug }.
