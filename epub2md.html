@@ -215,7 +215,7 @@
     <h1>EPUB to Markdown</h1>
     <!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->
   </div>
-  <p class="lead">Convert an EPUB to Pandoc-flavored Markdown in reading order.</p>
+  <p class="lead">Convert an EPUB to Markdown in reading order.</p>
 
   <label class="drop-zone" id="dropZone" for="fileInput">
     <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -223,7 +223,7 @@
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
     </svg>
     <p class="drop-text"><strong>Drop an EPUB here</strong> or click to choose a file</p>
-    <p class="drop-hint">Processed locally, then downloaded as <code>name.md</code></p>
+    <p class="drop-hint">Processed locally. Downloaded as <code>name.md</code>, or <code>name.zip</code> (md + images) if the book has images.</p>
     <input type="file" id="fileInput" accept="application/epub+zip,.epub">
   </label>
 
@@ -231,10 +231,10 @@
 
   <details>
     <summary>About &amp; limitations</summary>
-    <p><strong>What this does:</strong> Reads the EPUB's <code>container.xml</code> to find the OPF package, walks the spine in reading order, and emits Pandoc-flavored Markdown.</p>
-    <p><strong>Preserved:</strong> headings, paragraphs, bold, italic, strikethrough (<code>~~x~~</code>), superscript / subscript (<code>^x^</code> / <code>~x~</code>), inline code, fenced code blocks, lists (nested), blockquotes, links, tables, horizontal rules, and Pandoc-style footnotes (<code>[^id]</code>) when the source uses EPUB <code>epub:type="noteref"</code> / <code>epub:type="footnote"</code> attributes.</p>
-    <p><strong>TOC links:</strong> cross-chapter links like <code>&lt;a href="chapter01.html"&gt;</code> are rewritten to same-document anchors (<code>#chapter01</code>). An anchor is emitted at the start of every chapter so the links resolve in the merged file.</p>
-    <p><strong>Images:</strong> emitted as <code>![alt](filename)</code> with the basename only. Image bytes are not included — the output is a single <code>.md</code> file.</p>
+    <p><strong>What this does:</strong> Reads the EPUB's <code>container.xml</code> to find the OPF package, walks the spine in reading order, and emits Markdown.</p>
+    <p><strong>Preserved:</strong> headings, paragraphs, bold, italic, strikethrough (<code>~~x~~</code>), superscript / subscript (<code>^x^</code> / <code>~x~</code>), inline code, fenced code blocks, lists (nested), blockquotes, links, tables, horizontal rules, and footnotes (<code>[^id]</code>) when the source uses EPUB <code>epub:type="noteref"</code> / <code>epub:type="footnote"</code> attributes.</p>
+    <p><strong>TOC links:</strong> cross-chapter links like <code>&lt;a href="chapter01.html#sec2"&gt;</code> are rewritten to same-document heading anchors. The renderer resolves fragments to the slug of the nearest enclosing heading (or the chapter's first heading if nothing matches). Chapters with no heading have no anchor — links to them won't resolve.</p>
+    <p><strong>Images:</strong> emitted as <code>![alt](images/filename)</code>. If the EPUB contains referenced images, the output is a <code>.zip</code> containing the <code>.md</code> alongside an <code>images/</code> folder so the links resolve. Books with no images download as a single <code>.md</code>. Basenames are deduplicated across chapters.</p>
     <p><strong>Stripped:</strong> ruby / furigana (base text kept, reading dropped), underlines, font-size changes, SVG, MathML, arbitrary CSS styling, and any HTML with no Markdown equivalent.</p>
     <p><strong>DRM:</strong> DRM-protected EPUBs (Adobe ADEPT, Apple FairPlay, Kindle KFX) cannot be read.</p>
     <p><strong>Privacy:</strong> Everything runs in your browser. Your file never leaves your device.</p>
@@ -315,6 +315,42 @@
     return out;
   }
 
+  // Slug a heading's visible text the GFM/Pandoc way. Non-Latin scripts
+  // are kept (so Japanese headings still produce a slug).
+  function slugify(text) {
+    return text
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^\p{Letter}\p{Number}\-]+/gu, '')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  // For a parsed chapter body, find every heading element, slug its text,
+  // and map any `id` attributes on the heading (or its ancestors up to the
+  // body) to that slug. Also return the first heading's slug as the
+  // chapter-level anchor.
+  function collectHeadingMap(body) {
+    const map = {};          // source-id → slug of nearest enclosed heading
+    let firstSlug = null;
+    const headings = body.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    for (const h of headings) {
+      const text = (h.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      const slug = slugify(text);
+      if (!slug) continue;
+      if (firstSlug === null) firstSlug = slug;
+      if (h.id && !map[h.id]) map[h.id] = slug;
+      let anc = h.parentElement;
+      while (anc && anc !== body) {
+        if (anc.id && !map[anc.id]) map[anc.id] = slug;
+        anc = anc.parentElement;
+      }
+    }
+    return { firstSlug, map };
+  }
+
   function renderNode(node, ctx, state) {
     if (node.nodeType === 3) {
       let t = node.nodeValue;
@@ -324,7 +360,10 @@
     if (node.nodeType !== 1) return '';
     const tag = node.tagName.toLowerCase();
     if (tag === 'script' || tag === 'style' || tag === 'head') return '';
+    return renderElementContent(node, tag, ctx, state);
+  }
 
+  function renderElementContent(node, tag, ctx, state) {
     const hMatch = /^h([1-6])$/.exec(tag);
     if (hMatch) {
       const body = renderChildren(node, ctx, state).replace(/\s+/g, ' ').trim();
@@ -403,19 +442,27 @@
         if (atype.includes('noteref') && href.startsWith('#')) {
           return '[^' + href.slice(1) + ']';
         }
-        // Rewrite cross-chapter links (foo.html[#frag]) into same-doc anchors.
-        // Leave external schemes (http:, mailto:, …) and same-file #frag alone.
-        if (href && !/^[a-z][a-z0-9+\-.]*:/i.test(href) && !href.startsWith('#')) {
+        // Rewrite internal links to heading-slug anchors in the merged doc.
+        // External schemes (http:, mailto:, data:, …) pass through unchanged.
+        const isExternal = /^[a-z][a-z0-9+\-.]*:/i.test(href) || href.startsWith('//');
+        if (href && !isExternal) {
           const hashIdx = href.indexOf('#');
           const fragment = hashIdx >= 0 ? href.slice(hashIdx + 1) : '';
           const pathPart = hashIdx >= 0 ? href.slice(0, hashIdx) : href;
+          let meta = null;
           if (pathPart) {
             try {
               const abs = resolvePath(state.chapterDir || '', href);
-              if (ctx.spineTargets && ctx.spineTargets[abs]) {
-                href = '#' + (fragment || ctx.spineTargets[abs]);
-              }
-            } catch (_) { /* leave href untouched */ }
+              meta = ctx.chapterMetas && ctx.chapterMetas[abs];
+            } catch (_) { /* keep meta null */ }
+          } else {
+            meta = ctx.chapterMetas && ctx.chapterMetas[state.chapterPath];
+          }
+          if (meta) {
+            const frag = fragment && meta.map[fragment];
+            if (frag) href = '#' + frag;
+            else if (meta.firstSlug) href = '#' + meta.firstSlug;
+            // else: no heading to target; leave original href
           }
         }
         const text = renderChildren(node, ctx, state).replace(/\s+/g, ' ').trim();
@@ -424,10 +471,35 @@
       }
 
       case 'img': {
-        const src = (node.getAttribute('src') || '').split('/').pop();
+        const src = node.getAttribute('src') || '';
         const alt = node.getAttribute('alt') || '';
         if (!src) return '';
-        return '![' + escapeMd(alt) + '](' + src + ')';
+        // External URL (http://, data:, //): leave as-is, nothing to bundle.
+        if (/^[a-z][a-z0-9+\-.]*:/i.test(src) || src.startsWith('//')) {
+          return '![' + escapeMd(alt) + '](' + src + ')';
+        }
+        // Internal: resolve against chapter dir, track for zip bundling,
+        // deduplicate basenames across chapters so output filenames are unique.
+        let outName;
+        try {
+          const abs = resolvePath(state.chapterDir || '', src);
+          if (ctx.images[abs]) {
+            outName = ctx.images[abs];
+          } else {
+            const base = abs.split('/').pop() || 'image';
+            const taken = new Set(Object.values(ctx.images));
+            const dot = base.lastIndexOf('.');
+            const stem = dot > 0 ? base.slice(0, dot) : base;
+            const ext = dot > 0 ? base.slice(dot) : '';
+            let unique = base, n = 2;
+            while (taken.has(unique)) unique = `${stem}-${n++}${ext}`;
+            ctx.images[abs] = unique;
+            outName = unique;
+          }
+        } catch (_) {
+          outName = src.split('/').pop();
+        }
+        return '![' + escapeMd(alt) + '](images/' + outName + ')';
       }
 
       case 'ruby': {
@@ -534,19 +606,15 @@
   }
 
   function renderMarkdown(root, ctx, initialState) {
-    const state = { listDepth: 0, inPre: false, chapterDir: '', ...(initialState || {}) };
+    const state = {
+      listDepth: 0, inPre: false, chapterDir: '', chapterPath: '',
+      ...(initialState || {}),
+    };
     const raw = renderNode(root, ctx, state);
     return raw
       .replace(/[ \t]+\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-  }
-
-  // Derive a URL-safe anchor id from a spine item's filename basename.
-  function anchorFromPath(path) {
-    const base = path.split('/').pop().replace(/\.x?html?$/i, '');
-    const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    return slug;
   }
 
   async function epubToMarkdown(file) {
@@ -597,23 +665,12 @@
         `Extracting ${spineRefs.length} chapter${spineRefs.length === 1 ? '' : 's'}.`
       );
 
-      // Build spine-path → anchor-id map so cross-chapter <a href="x.html">
-      // links can be rewritten to same-document anchors after merge.
-      const spineTargets = {};
       const spinePaths = spineRefs.map(h => resolvePath(opfDir, h));
-      const usedAnchors = new Set();
-      for (let i = 0; i < spinePaths.length; i++) {
-        let anchor = anchorFromPath(spinePaths[i]) || `chapter-${i + 1}`;
-        let unique = anchor, n = 2;
-        while (usedAnchors.has(unique)) unique = `${anchor}-${n++}`;
-        usedAnchors.add(unique);
-        spineTargets[spinePaths[i]] = unique;
-      }
 
-      const ctx = { footnotes: [], spineTargets };
-      const chapters = [];
-      for (let i = 0; i < spineRefs.length; i++) {
-        const path = spinePaths[i];
+      // Parse all spine chapters first so we can pre-scan heading slugs
+      // before rendering (needed to rewrite cross-chapter links).
+      const parsedChapters = [];
+      for (const path of spinePaths) {
         const entry = zip.file(path);
         if (!entry) continue;
         const html = await entry.async('string');
@@ -623,15 +680,30 @@
           ? new DOMParser().parseFromString(html, 'text/html')
           : doc).body || doc.documentElement;
         const chapterDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-        const md = renderMarkdown(body, ctx, { chapterDir });
-        if (md) chapters.push(`<a id="${spineTargets[path]}"></a>\n\n${md}`);
+        parsedChapters.push({ path, body, chapterDir });
+      }
+
+      // chapter-path → { firstSlug, map: source-id → heading-slug }.
+      // Renderer uses this to rewrite cross-chapter links to heading anchors
+      // that the markdown renderer will auto-generate from heading text.
+      const chapterMetas = {};
+      for (const c of parsedChapters) chapterMetas[c.path] = collectHeadingMap(c.body);
+
+      const ctx = { footnotes: [], chapterMetas, images: {} };
+      const chapters = [];
+      for (const c of parsedChapters) {
+        const md = renderMarkdown(c.body, ctx, {
+          chapterDir: c.chapterDir,
+          chapterPath: c.path,
+        });
+        if (md) chapters.push(md);
       }
 
       if (!chapters.length) throw new Error('No readable content found in spine.');
 
       const titleEl = opfDoc.getElementsByTagName('dc:title')[0] || opfDoc.querySelector('title');
       const bookTitle = titleEl ? titleEl.textContent.trim() : '';
-      const header = bookTitle ? '% ' + bookTitle + '\n\n' : '';
+      const header = bookTitle ? '# ' + bookTitle + '\n\n' : '';
       let output = header + chapters.join('\n\n');
       if (ctx.footnotes.length) {
         output += '\n\n' + ctx.footnotes
@@ -640,9 +712,30 @@
       }
 
       const baseName = file.name.replace(/\.epub$/i, '');
-      const outName = `${baseName}.md`;
+      const imageEntries = Object.keys(ctx.images);
 
-      const blob = new Blob([output], { type: 'text/markdown;charset=utf-8' });
+      let blob, outName, detailExtra = '';
+      if (imageEntries.length) {
+        // Bundle .md + images/ into a .zip so ![alt](images/x.jpg) resolves.
+        const outZip = new JSZip();
+        outZip.file(`${baseName}.md`, output);
+        const imgFolder = outZip.folder('images');
+        let packed = 0;
+        for (const abs of imageEntries) {
+          const entry = zip.file(abs);
+          if (!entry) continue; // referenced but missing — skip from bundle
+          const bytes = await entry.async('uint8array');
+          imgFolder.file(ctx.images[abs], bytes);
+          packed++;
+        }
+        blob = await outZip.generateAsync({ type: 'blob' });
+        outName = `${baseName}.zip`;
+        detailExtra = ` &middot; ${packed} image${packed === 1 ? '' : 's'}`;
+      } else {
+        blob = new Blob([output], { type: 'text/markdown;charset=utf-8' });
+        outName = `${baseName}.md`;
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -652,11 +745,11 @@
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-      const sizeKB = (new Blob([output]).size / 1024).toFixed(1);
+      const sizeKB = (blob.size / 1024).toFixed(1);
       setStatus(
         'done',
         `Done &mdash; downloaded ${escapeHtml(outName)}`,
-        `${chapters.length} chapter${chapters.length === 1 ? '' : 's'} &middot; ${sizeKB}&nbsp;KB`
+        `${chapters.length} chapter${chapters.length === 1 ? '' : 's'}${detailExtra} &middot; ${sizeKB}&nbsp;KB`
       );
     } catch (err) {
       console.error(err);
