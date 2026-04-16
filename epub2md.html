@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EPUB to TXT</title>
+<title>EPUB to Markdown</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -212,10 +212,10 @@
 <body>
 <main>
   <div class="page-header">
-    <h1>EPUB to TXT</h1>
+    <h1>EPUB to Markdown</h1>
     <!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->
   </div>
-  <p class="lead">Extract plain text from an EPUB file in reading order.</p>
+  <p class="lead">Convert an EPUB to Pandoc-flavored Markdown in reading order.</p>
 
   <label class="drop-zone" id="dropZone" for="fileInput">
     <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -223,7 +223,7 @@
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
     </svg>
     <p class="drop-text"><strong>Drop an EPUB here</strong> or click to choose a file</p>
-    <p class="drop-hint">Processed locally, then downloaded as <code>name.txt</code></p>
+    <p class="drop-hint">Processed locally, then downloaded as <code>name.md</code></p>
     <input type="file" id="fileInput" accept="application/epub+zip,.epub">
   </label>
 
@@ -231,8 +231,11 @@
 
   <details>
     <summary>About &amp; limitations</summary>
-    <p><strong>What this does:</strong> Reads the EPUB's <code>container.xml</code> to find the OPF package, walks the spine in reading order, and extracts visible text from each XHTML chapter. <code>&lt;script&gt;</code> and <code>&lt;style&gt;</code> content is dropped; block elements become paragraph breaks; chapters are separated by a blank line.</p>
-    <p><strong>What it cannot do:</strong> DRM-protected EPUBs (Adobe ADEPT, Apple FairPlay, Kindle KFX) cannot be read — they are encrypted and this tool does not break DRM. Images, tables, footnotes, and ruby annotations are stripped down to their text content.</p>
+    <p><strong>What this does:</strong> Reads the EPUB's <code>container.xml</code> to find the OPF package, walks the spine in reading order, and emits Pandoc-flavored Markdown.</p>
+    <p><strong>Preserved:</strong> headings, paragraphs, bold, italic, strikethrough (<code>~~x~~</code>), superscript / subscript (<code>^x^</code> / <code>~x~</code>), inline code, fenced code blocks, lists (nested), blockquotes, links, tables, horizontal rules, and Pandoc-style footnotes (<code>[^id]</code>) when the source uses EPUB <code>epub:type="noteref"</code> / <code>epub:type="footnote"</code> attributes.</p>
+    <p><strong>Images:</strong> emitted as <code>![alt](filename)</code> with the basename only. Image bytes are not included — the output is a single <code>.md</code> file.</p>
+    <p><strong>Stripped:</strong> ruby / furigana (base text kept, reading dropped), underlines, font-size changes, SVG, MathML, arbitrary CSS styling, and any HTML with no Markdown equivalent.</p>
+    <p><strong>DRM:</strong> DRM-protected EPUBs (Adobe ADEPT, Apple FairPlay, Kindle KFX) cannot be read.</p>
     <p><strong>Privacy:</strong> Everything runs in your browser. Your file never leaves your device.</p>
   </details>
 
@@ -289,39 +292,240 @@
     return doc;
   }
 
-  // Walk DOM, emit text with newlines at block boundaries.
-  const BLOCK = new Set([
-    'p', 'div', 'br', 'li', 'tr', 'td', 'th',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'blockquote', 'pre', 'section', 'article',
-    'header', 'footer', 'nav', 'aside', 'figure', 'figcaption',
-    'hr', 'ul', 'ol', 'dl', 'dt', 'dd', 'table'
-  ]);
+  // ─── Markdown renderer ───────────────────────────────────────────────
+  // Walks XHTML, emits Pandoc-flavored Markdown. Collects footnotes so
+  // they can be appended at the end of the document.
 
-  function extractText(root) {
-    const parts = [];
-    const walk = (node) => {
-      if (node.nodeType === 3) {
-        parts.push(node.nodeValue);
-        return;
+  // Minimal escape — only the chars that flip meaning inside a text run.
+  // Line-start triggers (#, -, +, >, digit-dot, |) are left alone; EPUB
+  // text nodes rarely begin a logical line with those, and over-escaping
+  // makes prose ugly.
+  function escapeMd(s) {
+    return s.replace(/([\\`*_\[\]])/g, '\\$1');
+  }
+
+  function getEpubType(el) {
+    return (el.getAttribute('epub:type') || el.getAttribute('type') || '').toLowerCase();
+  }
+
+  function renderChildren(node, ctx, state) {
+    let out = '';
+    for (const c of node.childNodes) out += renderNode(c, ctx, state);
+    return out;
+  }
+
+  function renderNode(node, ctx, state) {
+    if (node.nodeType === 3) {
+      let t = node.nodeValue;
+      if (!state.inPre) t = t.replace(/[ \t\r\n]+/g, ' ');
+      return state.inPre ? t : escapeMd(t);
+    }
+    if (node.nodeType !== 1) return '';
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'script' || tag === 'style' || tag === 'head') return '';
+
+    const hMatch = /^h([1-6])$/.exec(tag);
+    if (hMatch) {
+      const body = renderChildren(node, ctx, state).replace(/\s+/g, ' ').trim();
+      return body ? '\n\n' + '#'.repeat(+hMatch[1]) + ' ' + body + '\n\n' : '';
+    }
+
+    switch (tag) {
+      case 'p':
+      case 'div':
+      case 'section':
+      case 'article':
+      case 'header':
+      case 'footer':
+      case 'nav':
+      case 'figure':
+      case 'figcaption':
+        return '\n\n' + renderChildren(node, ctx, state) + '\n\n';
+
+      case 'aside': {
+        const etype = getEpubType(node);
+        const id = node.getAttribute('id');
+        if (etype.includes('footnote') && id) {
+          const body = renderChildren(node, ctx, state).replace(/\s+/g, ' ').trim();
+          ctx.footnotes.push({ id, body });
+          return '';
+        }
+        return '\n\n' + renderChildren(node, ctx, state) + '\n\n';
       }
-      if (node.nodeType !== 1) return;
-      const tag = node.tagName.toLowerCase();
-      if (tag === 'script' || tag === 'style' || tag === 'rt' || tag === 'rp') return;
-      const block = BLOCK.has(tag);
-      if (block) parts.push('\n');
-      for (const child of node.childNodes) walk(child);
-      if (block) parts.push('\n');
-    };
-    walk(root);
-    return parts.join('')
-      .replace(/[ \t]+/g, ' ')
-      .replace(/ *\n */g, '\n')
+
+      case 'br':  return '  \n';
+      case 'hr':  return '\n\n---\n\n';
+
+      case 'strong':
+      case 'b': {
+        const body = renderChildren(node, ctx, state).trim();
+        return body ? '**' + body + '**' : '';
+      }
+      case 'em':
+      case 'i': {
+        const body = renderChildren(node, ctx, state).trim();
+        return body ? '*' + body + '*' : '';
+      }
+      case 's':
+      case 'del':
+      case 'strike': {
+        const body = renderChildren(node, ctx, state).trim();
+        return body ? '~~' + body + '~~' : '';
+      }
+      case 'sup': {
+        const body = renderChildren(node, ctx, state).trim();
+        if (!body) return '';
+        // Pandoc sup syntax disallows spaces; fall back to HTML if present.
+        if (/\s/.test(body)) return '<sup>' + body + '</sup>';
+        return '^' + body + '^';
+      }
+      case 'sub': {
+        const body = renderChildren(node, ctx, state).trim();
+        if (!body) return '';
+        if (/\s/.test(body)) return '<sub>' + body + '</sub>';
+        return '~' + body + '~';
+      }
+
+      case 'code':
+        if (state.inPre) return (node.textContent || '');
+        return '`' + (node.textContent || '').replace(/`/g, '\\`') + '`';
+
+      case 'pre': {
+        const preState = { ...state, inPre: true };
+        const body = renderChildren(node, ctx, preState).replace(/\n+$/, '');
+        return '\n\n```\n' + body + '\n```\n\n';
+      }
+
+      case 'a': {
+        const href = node.getAttribute('href') || '';
+        const atype = getEpubType(node);
+        if (atype.includes('noteref') && href.startsWith('#')) {
+          return '[^' + href.slice(1) + ']';
+        }
+        const text = renderChildren(node, ctx, state).replace(/\s+/g, ' ').trim();
+        if (!href) return text;
+        return '[' + text + '](' + href + ')';
+      }
+
+      case 'img': {
+        const src = (node.getAttribute('src') || '').split('/').pop();
+        const alt = node.getAttribute('alt') || '';
+        if (!src) return '';
+        return '![' + escapeMd(alt) + '](' + src + ')';
+      }
+
+      case 'ruby': {
+        // Keep base text, drop <rt>/<rp> (reading marks have no markdown form).
+        let out = '';
+        for (const c of node.childNodes) {
+          if (c.nodeType === 1) {
+            const ct = c.tagName.toLowerCase();
+            if (ct === 'rt' || ct === 'rp') continue;
+          }
+          out += renderNode(c, ctx, state);
+        }
+        return out;
+      }
+
+      case 'ul':
+      case 'ol':
+        return renderList(node, tag, ctx, state);
+
+      case 'li':
+        return renderChildren(node, ctx, state);
+
+      case 'blockquote':
+        return renderQuote(node, ctx, state);
+
+      case 'table':
+        return renderTable(node, ctx);
+
+      case 'tr':
+      case 'td':
+      case 'th':
+      case 'thead':
+      case 'tbody':
+      case 'tfoot':
+      case 'caption':
+      case 'colgroup':
+      case 'col':
+        return renderChildren(node, ctx, state);
+
+      default:
+        return renderChildren(node, ctx, state);
+    }
+  }
+
+  function renderList(node, tag, ctx, state) {
+    const depth = state.listDepth || 0;
+    const inner = { ...state, listDepth: depth + 1 };
+    const indent = '  '.repeat(depth);
+    let out = depth === 0 ? '\n\n' : '\n';
+    let i = 1;
+    for (const c of node.children) {
+      if (c.tagName.toLowerCase() !== 'li') continue;
+      const bullet = tag === 'ol' ? `${i}. ` : '- ';
+      let body = renderChildren(c, ctx, inner);
+      body = body.replace(/^\s+|\s+$/g, '');
+      const lines = body.split('\n');
+      out += indent + bullet + (lines.shift() || '') + '\n';
+      for (const l of lines) out += indent + '  ' + l + '\n';
+      i++;
+    }
+    return out + (depth === 0 ? '\n' : '');
+  }
+
+  function renderQuote(node, ctx, state) {
+    let body = renderChildren(node, ctx, state).replace(/^\s+|\s+$/g, '');
+    if (!body) return '';
+    const quoted = body.split('\n').map(l => l.length ? '> ' + l : '>').join('\n');
+    return '\n\n' + quoted + '\n\n';
+  }
+
+  function renderTable(node, ctx) {
+    const rows = [];
+    let firstRowIsHeader = false;
+    let rowIdx = 0;
+    for (const r of node.getElementsByTagName('tr')) {
+      const cells = [];
+      let anyTh = false;
+      for (const c of r.children) {
+        const t = c.tagName.toLowerCase();
+        if (t !== 'td' && t !== 'th') continue;
+        if (t === 'th') anyTh = true;
+        const cellState = { listDepth: 0, inPre: false };
+        let text = renderChildren(c, ctx, cellState);
+        text = text.replace(/\s+/g, ' ').replace(/\|/g, '\\|').trim();
+        cells.push(text);
+      }
+      if (cells.length) rows.push(cells);
+      if (rowIdx === 0) firstRowIsHeader = anyTh;
+      rowIdx++;
+    }
+    if (!rows.length) return '';
+    const ncols = Math.max(...rows.map(r => r.length));
+    for (const r of rows) while (r.length < ncols) r.push('');
+    const sep = '|' + Array(ncols).fill(' --- ').join('|') + '|';
+    let out = '\n\n';
+    if (firstRowIsHeader) {
+      out += '| ' + rows[0].join(' | ') + ' |\n' + sep + '\n';
+      for (let i = 1; i < rows.length; i++) out += '| ' + rows[i].join(' | ') + ' |\n';
+    } else {
+      out += '| ' + Array(ncols).fill(' ').join(' | ') + ' |\n' + sep + '\n';
+      for (const r of rows) out += '| ' + r.join(' | ') + ' |\n';
+    }
+    return out + '\n';
+  }
+
+  function renderMarkdown(root, ctx) {
+    const raw = renderNode(root, ctx, { listDepth: 0, inPre: false });
+    return raw
+      .replace(/[ \t]+\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
 
-  async function epubToText(file) {
+  async function epubToMarkdown(file) {
     if (!file) return;
     if (!/\.epub$/i.test(file.name) && file.type !== 'application/epub+zip') {
       setStatus('error', 'Not an EPUB', 'Please select a file with an <code>.epub</code> extension.');
@@ -369,6 +573,7 @@
         `Extracting ${spineRefs.length} chapter${spineRefs.length === 1 ? '' : 's'}.`
       );
 
+      const ctx = { footnotes: [] };
       const chapters = [];
       for (const href of spineRefs) {
         const path = resolvePath(opfDir, href);
@@ -380,21 +585,26 @@
         const body = (doc.querySelector('parsererror')
           ? new DOMParser().parseFromString(html, 'text/html')
           : doc).body || doc.documentElement;
-        const text = extractText(body);
-        if (text) chapters.push(text);
+        const md = renderMarkdown(body, ctx);
+        if (md) chapters.push(md);
       }
 
-      if (!chapters.length) throw new Error('No readable text found in spine.');
+      if (!chapters.length) throw new Error('No readable content found in spine.');
 
       const titleEl = opfDoc.getElementsByTagName('dc:title')[0] || opfDoc.querySelector('title');
       const bookTitle = titleEl ? titleEl.textContent.trim() : '';
-      const header = bookTitle ? bookTitle + '\n\n' : '';
-      const output = header + chapters.join('\n\n');
+      const header = bookTitle ? '% ' + bookTitle + '\n\n' : '';
+      let output = header + chapters.join('\n\n');
+      if (ctx.footnotes.length) {
+        output += '\n\n' + ctx.footnotes
+          .map(f => `[^${f.id}]: ${f.body}`)
+          .join('\n\n');
+      }
 
       const baseName = file.name.replace(/\.epub$/i, '');
-      const outName = `${baseName}.txt`;
+      const outName = `${baseName}.md`;
 
-      const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+      const blob = new Blob([output], { type: 'text/markdown;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -427,7 +637,7 @@
 
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
-    if (file) epubToText(file);
+    if (file) epubToMarkdown(file);
     fileInput.value = '';
   });
 
@@ -448,7 +658,7 @@
 
   dropZone.addEventListener('drop', (e) => {
     const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) epubToText(file);
+    if (file) epubToMarkdown(file);
   });
 
   window.addEventListener('dragover', (e) => e.preventDefault());
