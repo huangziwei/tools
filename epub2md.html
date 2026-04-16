@@ -233,6 +233,7 @@
     <summary>About &amp; limitations</summary>
     <p><strong>What this does:</strong> Reads the EPUB's <code>container.xml</code> to find the OPF package, walks the spine in reading order, and emits Pandoc-flavored Markdown.</p>
     <p><strong>Preserved:</strong> headings, paragraphs, bold, italic, strikethrough (<code>~~x~~</code>), superscript / subscript (<code>^x^</code> / <code>~x~</code>), inline code, fenced code blocks, lists (nested), blockquotes, links, tables, horizontal rules, and Pandoc-style footnotes (<code>[^id]</code>) when the source uses EPUB <code>epub:type="noteref"</code> / <code>epub:type="footnote"</code> attributes.</p>
+    <p><strong>TOC links:</strong> cross-chapter links like <code>&lt;a href="chapter01.html"&gt;</code> are rewritten to same-document anchors (<code>#chapter01</code>). An anchor is emitted at the start of every chapter so the links resolve in the merged file.</p>
     <p><strong>Images:</strong> emitted as <code>![alt](filename)</code> with the basename only. Image bytes are not included — the output is a single <code>.md</code> file.</p>
     <p><strong>Stripped:</strong> ruby / furigana (base text kept, reading dropped), underlines, font-size changes, SVG, MathML, arbitrary CSS styling, and any HTML with no Markdown equivalent.</p>
     <p><strong>DRM:</strong> DRM-protected EPUBs (Adobe ADEPT, Apple FairPlay, Kindle KFX) cannot be read.</p>
@@ -397,10 +398,25 @@
       }
 
       case 'a': {
-        const href = node.getAttribute('href') || '';
+        let href = node.getAttribute('href') || '';
         const atype = getEpubType(node);
         if (atype.includes('noteref') && href.startsWith('#')) {
           return '[^' + href.slice(1) + ']';
+        }
+        // Rewrite cross-chapter links (foo.html[#frag]) into same-doc anchors.
+        // Leave external schemes (http:, mailto:, …) and same-file #frag alone.
+        if (href && !/^[a-z][a-z0-9+\-.]*:/i.test(href) && !href.startsWith('#')) {
+          const hashIdx = href.indexOf('#');
+          const fragment = hashIdx >= 0 ? href.slice(hashIdx + 1) : '';
+          const pathPart = hashIdx >= 0 ? href.slice(0, hashIdx) : href;
+          if (pathPart) {
+            try {
+              const abs = resolvePath(state.chapterDir || '', href);
+              if (ctx.spineTargets && ctx.spineTargets[abs]) {
+                href = '#' + (fragment || ctx.spineTargets[abs]);
+              }
+            } catch (_) { /* leave href untouched */ }
+          }
         }
         const text = renderChildren(node, ctx, state).replace(/\s+/g, ' ').trim();
         if (!href) return text;
@@ -517,12 +533,20 @@
     return out + '\n';
   }
 
-  function renderMarkdown(root, ctx) {
-    const raw = renderNode(root, ctx, { listDepth: 0, inPre: false });
+  function renderMarkdown(root, ctx, initialState) {
+    const state = { listDepth: 0, inPre: false, chapterDir: '', ...(initialState || {}) };
+    const raw = renderNode(root, ctx, state);
     return raw
       .replace(/[ \t]+\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
+  }
+
+  // Derive a URL-safe anchor id from a spine item's filename basename.
+  function anchorFromPath(path) {
+    const base = path.split('/').pop().replace(/\.x?html?$/i, '');
+    const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return slug;
   }
 
   async function epubToMarkdown(file) {
@@ -573,10 +597,23 @@
         `Extracting ${spineRefs.length} chapter${spineRefs.length === 1 ? '' : 's'}.`
       );
 
-      const ctx = { footnotes: [] };
+      // Build spine-path → anchor-id map so cross-chapter <a href="x.html">
+      // links can be rewritten to same-document anchors after merge.
+      const spineTargets = {};
+      const spinePaths = spineRefs.map(h => resolvePath(opfDir, h));
+      const usedAnchors = new Set();
+      for (let i = 0; i < spinePaths.length; i++) {
+        let anchor = anchorFromPath(spinePaths[i]) || `chapter-${i + 1}`;
+        let unique = anchor, n = 2;
+        while (usedAnchors.has(unique)) unique = `${anchor}-${n++}`;
+        usedAnchors.add(unique);
+        spineTargets[spinePaths[i]] = unique;
+      }
+
+      const ctx = { footnotes: [], spineTargets };
       const chapters = [];
-      for (const href of spineRefs) {
-        const path = resolvePath(opfDir, href);
+      for (let i = 0; i < spineRefs.length; i++) {
+        const path = spinePaths[i];
         const entry = zip.file(path);
         if (!entry) continue;
         const html = await entry.async('string');
@@ -585,8 +622,9 @@
         const body = (doc.querySelector('parsererror')
           ? new DOMParser().parseFromString(html, 'text/html')
           : doc).body || doc.documentElement;
-        const md = renderMarkdown(body, ctx);
-        if (md) chapters.push(md);
+        const chapterDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+        const md = renderMarkdown(body, ctx, { chapterDir });
+        if (md) chapters.push(`<a id="${spineTargets[path]}"></a>\n\n${md}`);
       }
 
       if (!chapters.length) throw new Error('No readable content found in spine.');
