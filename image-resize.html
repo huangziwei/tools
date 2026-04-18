@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Resizer</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111418;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --border-strong: #cbd5e1;
+    --panel: #f8fafc;
+    --panel-active: #eff6ff;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #f1f5f9;
+    --error: #b91c1c;
+    --error-bg: #fef2f2;
+    --error-border: #fecaca;
+    --warn: #92400e;
+    --warn-bg: #fffbeb;
+    --warn-border: #fde68a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eaed;
+      --muted: #9aa0a6;
+      --border: #262a30;
+      --border-strong: #3a3f47;
+      --panel: #14171c;
+      --panel-active: #17253f;
+      --accent: #60a5fa;
+      --accent-hover: #93c5fd;
+      --code-bg: #1a1f26;
+      --error: #fca5a5;
+      --error-bg: #1f0e0f;
+      --error-border: #7f1d1d;
+      --warn: #fcd34d;
+      --warn-bg: #1f1606;
+      --warn-border: #78350f;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 2rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 640px; }
+
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.5rem; }
+  h1 { font-size: 1.75rem; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+  .github-link { color: var(--muted); display: flex; }
+  .github-link:hover { color: var(--fg); text-decoration: none; }
+  p.lead { color: var(--muted); margin: 0 0 2rem; font-size: 0.95rem; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  .drop-zone {
+    display: block;
+    border: 2px dashed var(--border-strong);
+    border-radius: 12px;
+    padding: 2.25rem 1.5rem;
+    text-align: center;
+    background: var(--panel);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .drop-zone:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  .drop-icon { width: 36px; height: 36px; color: var(--muted); margin-bottom: 0.6rem; }
+  .drop-text { font-size: 0.98rem; margin: 0 0 0.2rem; }
+  .drop-text strong { font-weight: 600; }
+  .drop-hint { color: var(--muted); font-size: 0.82rem; margin: 0; }
+
+  input[type="file"] {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.45rem;
+    color: var(--fg);
+  }
+
+  .section { margin-top: 1.4rem; }
+
+  .preset-row, .format-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .preset-btn, .format-btn {
+    padding: 0.4rem 0.85rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .preset-btn:hover, .format-btn:hover {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .preset-btn.active, .format-btn.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .size-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.7rem;
+  }
+  input[type="number"] {
+    width: 7rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.95rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    font-family: inherit;
+  }
+  input[type="number"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  .unit { font-size: 0.9rem; color: var(--muted); }
+
+  details.advanced {
+    margin-top: 1.25rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+  }
+  details.advanced > summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--muted);
+    user-select: none;
+    list-style: none;
+  }
+  details.advanced > summary::-webkit-details-marker { display: none; }
+  details.advanced > summary::before {
+    content: "▸";
+    display: inline-block;
+    width: 1em;
+    color: var(--muted);
+  }
+  details.advanced[open] > summary::before { content: "▾"; }
+  details.advanced input[type="number"] { width: 10rem; }
+
+  .comparison {
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem;
+  }
+  @media (max-width: 520px) {
+    .comparison { grid-template-columns: 1fr; }
+  }
+  .compare-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+  .compare-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .compare-img-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: var(--bg);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .compare-img-wrap img {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+  }
+  .compare-placeholder {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .compare-info {
+    font-size: 0.82rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .compare-info strong { color: var(--fg); font-weight: 500; }
+  .compare-info em { font-style: italic; color: var(--muted); }
+
+  .status {
+    margin-top: 1rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    display: none;
+    line-height: 1.5;
+  }
+  .status.busy {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    display: block;
+  }
+  .status.error {
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
+    color: var(--error);
+    display: block;
+  }
+  .status.warn {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    color: var(--warn);
+    display: block;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    margin-right: 0.5rem;
+    vertical-align: -1px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn-row { margin-top: 1.25rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .btn-primary {
+    padding: 0.6rem 1.4rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-secondary {
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  footer {
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="page-header">
+    <h1>Image Resizer</h1>
+    <!-- SOURCE_LINK_START --><a href="https://github.com/huangziwei/tools/blob/main/image-resize.html" target="_blank" rel="noopener" class="github-link" title="View source on GitHub"><svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a><!-- SOURCE_LINK_END -->
+  </div>
+  <p class="lead">Shrink an image to fit a platform's upload size limit.</p>
+
+  <label class="drop-zone" id="dropZone" for="fileInput">
+    <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21 15 16 10 5 21"/>
+    </svg>
+    <p class="drop-text"><strong>Drop an image here</strong> or click to choose</p>
+    <p class="drop-hint">JPEG, PNG, WebP, GIF</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </label>
+
+  <div id="configSection" style="display:none">
+    <div class="section">
+      <span class="field-label">Target size</span>
+      <div class="preset-row" id="presetRow">
+        <button type="button" class="preset-btn active" data-preset="pixelfed" data-mb="15">Pixelfed (15 MB)</button>
+        <button type="button" class="preset-btn" data-preset="bluesky" data-mb="1">Bluesky (1 MB)</button>
+        <button type="button" class="preset-btn" data-preset="mastodon" data-mb="8">Mastodon (8 MB)</button>
+        <button type="button" class="preset-btn" data-preset="twitter" data-mb="5">Twitter/X (5 MB)</button>
+        <button type="button" class="preset-btn" data-preset="custom" data-mb="">Custom</button>
+      </div>
+      <div class="size-row">
+        <input type="number" id="targetInput" value="15" step="0.1" min="0.01">
+        <span class="unit">MB</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <span class="field-label">Output format</span>
+      <div class="format-row" id="formatRow">
+        <button type="button" class="format-btn active" data-format="auto">Auto</button>
+        <button type="button" class="format-btn" data-format="image/jpeg">JPEG</button>
+        <button type="button" class="format-btn" data-format="image/webp">WebP</button>
+        <button type="button" class="format-btn" data-format="image/png">PNG</button>
+      </div>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="section">
+        <label class="field-label" for="maxDimInput">Max dimension (longest side, px)</label>
+        <input type="number" id="maxDimInput" placeholder="no limit" min="32" step="1">
+      </div>
+    </details>
+
+    <div class="comparison" id="comparison">
+      <div class="compare-card">
+        <div class="compare-title">Original</div>
+        <div class="compare-img-wrap">
+          <img id="sourcePreview" alt="Original preview">
+        </div>
+        <div class="compare-info" id="sourceInfo"></div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-title">Resized</div>
+        <div class="compare-img-wrap">
+          <img id="outputPreview" alt="Resized preview" style="display:none">
+          <span class="compare-placeholder" id="outputPlaceholder">Encoding…</span>
+        </div>
+        <div class="compare-info" id="outputInfo"></div>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="downloadBtn" disabled>Download</button>
+      <button class="btn-secondary" id="resetBtn">Start over</button>
+    </div>
+  </div>
+
+  <footer>
+    All data stays on your device.<br>
+    <!-- TOOL_META_START --><!-- TOOL_META_END -->
+  </footer>
+</main>
+
+<script>
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const configSection = document.getElementById('configSection');
+  const presetRow = document.getElementById('presetRow');
+  const formatRow = document.getElementById('formatRow');
+  const targetInput = document.getElementById('targetInput');
+  const maxDimInput = document.getElementById('maxDimInput');
+  const sourcePreview = document.getElementById('sourcePreview');
+  const outputPreview = document.getElementById('outputPreview');
+  const outputPlaceholder = document.getElementById('outputPlaceholder');
+  const sourceInfo = document.getElementById('sourceInfo');
+  const outputInfo = document.getElementById('outputInfo');
+  const statusEl = document.getElementById('status');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  let sourceFile = null;
+  let sourceImg = null;
+  let sourceUrl = null;
+  let outputUrl = null;
+  let outputBlob = null;
+  let outputName = '';
+  let currentFormat = 'auto';
+  let debounceTimer = null;
+  let runToken = 0;
+
+  function formatBytes(n) {
+    if (n < 1000) return n + ' B';
+    if (n < 10_000) return (n / 1000).toFixed(2) + ' KB';
+    if (n < 1_000_000) return Math.round(n / 1000) + ' KB';
+    if (n < 10_000_000) return (n / 1e6).toFixed(2) + ' MB';
+    return (n / 1e6).toFixed(1) + ' MB';
+  }
+
+  function mimeToExt(mime) {
+    switch (mime) {
+      case 'image/jpeg': return 'jpg';
+      case 'image/png': return 'png';
+      case 'image/webp': return 'webp';
+      case 'image/gif': return 'gif';
+      default: return 'img';
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function setStatus(kind, html) {
+    if (!kind) {
+      statusEl.className = 'status';
+      statusEl.innerHTML = '';
+      return;
+    }
+    statusEl.className = 'status ' + kind;
+    statusEl.innerHTML = html;
+  }
+
+  function loadFile(file) {
+    if (!file || !file.type.startsWith('image/')) {
+      setStatus('error', 'Please choose an image file.');
+      return;
+    }
+    setStatus(null);
+
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      sourceFile = file;
+      sourceImg = img;
+      if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+      sourceUrl = url;
+
+      sourcePreview.src = url;
+      sourceInfo.innerHTML = `<strong>${escapeHtml(file.name)}</strong><br>${img.naturalWidth}&times;${img.naturalHeight} &middot; ${formatBytes(file.size)}`;
+
+      outputPreview.removeAttribute('src');
+      outputPreview.style.display = 'none';
+      outputPlaceholder.style.display = '';
+      outputPlaceholder.textContent = 'Encoding…';
+      outputInfo.textContent = '';
+      downloadBtn.disabled = true;
+
+      configSection.style.display = '';
+      scheduleRun();
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      setStatus('error', 'Could not decode this image.');
+    };
+    img.src = url;
+  }
+
+  function drawAndEncode(width, height, mime, quality) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (mime === 'image/jpeg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+    }
+    ctx.drawImage(sourceImg, 0, 0, width, height);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (!blob) reject(new Error('encoder returned null'));
+        else resolve(blob);
+      }, mime, quality);
+    });
+  }
+
+  function pickOutputMime(userFormat, sourceMime) {
+    if (userFormat !== 'auto') return userFormat;
+    if (sourceMime === 'image/jpeg') return 'image/jpeg';
+    if (sourceMime === 'image/webp') return 'image/webp';
+    // PNG / GIF / anything else → WebP (alpha-safe, good compression)
+    return 'image/webp';
+  }
+
+  async function run() {
+    if (!sourceImg || !sourceFile) return;
+    const token = ++runToken;
+
+    const targetMB = parseFloat(targetInput.value);
+    if (!Number.isFinite(targetMB) || targetMB <= 0) return;
+    const targetBytes = Math.round(targetMB * 1e6);
+
+    const maxDim = parseInt(maxDimInput.value, 10) || null;
+    const mime = pickOutputMime(currentFormat, sourceFile.type);
+
+    const origDim = Math.max(sourceImg.naturalWidth, sourceImg.naturalHeight);
+    const needsShrink = maxDim && origDim > maxDim;
+
+    setStatus('busy', '<span class="spinner"></span>Resizing…');
+    downloadBtn.disabled = true;
+
+    // Fast path: source already fits, and user isn't forcing a format or dim change
+    if (currentFormat === 'auto' && !needsShrink && sourceFile.size <= targetBytes) {
+      applyResult({
+        blob: sourceFile,
+        width: sourceImg.naturalWidth,
+        height: sourceImg.naturalHeight,
+        mime: sourceFile.type,
+        quality: null,
+        unchanged: true,
+      });
+      return;
+    }
+
+    let width = sourceImg.naturalWidth;
+    let height = sourceImg.naturalHeight;
+    if (needsShrink) {
+      const scale = maxDim / origDim;
+      width = Math.max(1, Math.round(width * scale));
+      height = Math.max(1, Math.round(height * scale));
+    }
+
+    const qualitySteps = [0.92, 0.85, 0.75, 0.6, 0.45, 0.3];
+    const minDim = 32;
+    let result = null;
+    let lastAttempt = null;
+
+    try {
+      while (width >= minDim && height >= minDim) {
+        if (token !== runToken) return;
+
+        if (mime === 'image/png') {
+          const blob = await drawAndEncode(width, height, mime, undefined);
+          lastAttempt = { blob, width, height, mime, quality: null };
+          if (blob.size <= targetBytes) { result = lastAttempt; break; }
+        } else {
+          let found = null;
+          for (const q of qualitySteps) {
+            if (token !== runToken) return;
+            const blob = await drawAndEncode(width, height, mime, q);
+            const attempt = { blob, width, height, mime, quality: q };
+            if (blob.size <= targetBytes) { found = attempt; break; }
+            lastAttempt = attempt;
+          }
+          if (found) { result = found; break; }
+        }
+
+        width = Math.round(width * 0.8);
+        height = Math.round(height * 0.8);
+      }
+
+      if (token !== runToken) return;
+
+      if (result) {
+        applyResult(result);
+      } else if (lastAttempt) {
+        applyResult(
+          lastAttempt,
+          `Couldn't hit ${targetMB} MB at minimum quality. Smallest output is ${formatBytes(lastAttempt.blob.size)} at ${lastAttempt.width}&times;${lastAttempt.height}.`
+        );
+      } else {
+        setStatus('error', 'Could not produce any output.');
+      }
+    } catch (err) {
+      if (token === runToken) setStatus('error', 'Encoding failed: ' + escapeHtml(err.message));
+    }
+  }
+
+  function applyResult(result, warning) {
+    if (outputUrl) URL.revokeObjectURL(outputUrl);
+    outputBlob = result.blob;
+    outputUrl = URL.createObjectURL(result.blob);
+
+    if (result.unchanged) {
+      outputName = sourceFile.name;
+    } else {
+      const base = (sourceFile.name.replace(/\.[^.]+$/, '') || 'image');
+      outputName = `${base}_resized.${mimeToExt(result.mime)}`;
+    }
+
+    outputPlaceholder.style.display = 'none';
+    outputPreview.style.display = '';
+    outputPreview.src = outputUrl;
+
+    const targetMB = parseFloat(targetInput.value);
+    const pct = targetMB ? Math.round(result.blob.size / (targetMB * 1e6) * 100) : null;
+    const parts = [];
+    parts.push(`<strong>${escapeHtml(outputName)}</strong>`);
+    let line2 = `${result.width}&times;${result.height} &middot; ${formatBytes(result.blob.size)}`;
+    if (result.quality != null) line2 += ` &middot; q=${Math.round(result.quality * 100)}`;
+    parts.push(line2);
+    if (pct != null) parts.push(`${pct}% of target`);
+    if (result.unchanged) parts.push('<em>Already within the limit — file unchanged.</em>');
+    outputInfo.innerHTML = parts.join('<br>');
+
+    downloadBtn.disabled = false;
+    if (warning) setStatus('warn', warning);
+    else setStatus(null);
+  }
+
+  function scheduleRun() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(run, 200);
+  }
+
+  function syncPresetFromInput() {
+    const value = targetInput.value;
+    let matched = null;
+    presetRow.querySelectorAll('.preset-btn').forEach(b => {
+      b.classList.remove('active');
+      if (b.dataset.mb && b.dataset.mb === value) matched = b;
+    });
+    (matched || presetRow.querySelector('[data-preset="custom"]')).classList.add('active');
+  }
+
+  // --- Events ---
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  ['dragenter', 'dragover'].forEach(n => {
+    dropZone.addEventListener(n, e => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(n => {
+    dropZone.addEventListener(n, e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+    });
+  });
+  dropZone.addEventListener('drop', e => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+
+  presetRow.addEventListener('click', e => {
+    const btn = e.target.closest('.preset-btn');
+    if (!btn) return;
+    presetRow.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (btn.dataset.mb) {
+      targetInput.value = btn.dataset.mb;
+    } else {
+      targetInput.focus();
+      targetInput.select();
+    }
+    scheduleRun();
+  });
+
+  formatRow.addEventListener('click', e => {
+    const btn = e.target.closest('.format-btn');
+    if (!btn) return;
+    formatRow.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFormat = btn.dataset.format;
+    scheduleRun();
+  });
+
+  targetInput.addEventListener('input', () => {
+    syncPresetFromInput();
+    scheduleRun();
+  });
+
+  maxDimInput.addEventListener('input', scheduleRun);
+
+  downloadBtn.addEventListener('click', () => {
+    if (!outputBlob || !outputUrl) return;
+    const a = document.createElement('a');
+    a.href = outputUrl;
+    a.download = outputName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+    if (outputUrl) URL.revokeObjectURL(outputUrl);
+    sourceUrl = null; outputUrl = null;
+    sourceFile = null; sourceImg = null; outputBlob = null;
+    fileInput.value = '';
+    configSection.style.display = 'none';
+    setStatus(null);
+  });
+
+  // Prevent browser from opening files dropped outside the drop zone
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+</script>
+</body>
+</html>
