@@ -345,7 +345,6 @@
         <button type="button" class="preset-btn active" data-preset="pixelfed" data-mb="15">Pixelfed (15 MB)</button>
         <button type="button" class="preset-btn" data-preset="bluesky" data-mb="1">Bluesky (1 MB)</button>
         <button type="button" class="preset-btn" data-preset="mastodon" data-mb="8">Mastodon (8 MB)</button>
-        <button type="button" class="preset-btn" data-preset="twitter" data-mb="5">Twitter/X (5 MB)</button>
         <button type="button" class="preset-btn" data-preset="custom" data-mb="">Custom</button>
       </div>
       <div class="size-row">
@@ -522,8 +521,23 @@
     if (userFormat !== 'auto') return userFormat;
     if (sourceMime === 'image/jpeg') return 'image/jpeg';
     if (sourceMime === 'image/webp') return 'image/webp';
-    // PNG / GIF / anything else → WebP (alpha-safe, good compression)
     return 'image/webp';
+  }
+
+  const DEFAULT_QUALITY = { 'image/jpeg': 0.85, 'image/webp': 0.80 };
+  // Typical bpp at the default quality above, for photographic content
+  const TYPICAL_BPP = { 'image/jpeg': 0.35, 'image/webp': 0.20, 'image/png': 3.0 };
+
+  function estimateBpp(srcMime, srcBytes, srcPixels, dstMime) {
+    const typical = TYPICAL_BPP[dstMime] ?? 0.5;
+    if (dstMime === 'image/png') return typical;
+    if (srcMime === 'image/png' || srcMime === 'image/gif') return typical;
+    // Lossy re-encode can't exceed the source's own bpp, since we can't
+    // recover information the source already discarded. Cap there.
+    const srcBpp = srcBytes / srcPixels;
+    if (srcMime === dstMime) return Math.min(typical, srcBpp);
+    if (srcMime === 'image/jpeg' && dstMime === 'image/webp') return Math.min(typical, srcBpp * 0.5);
+    return typical;
   }
 
   async function run() {
@@ -536,74 +550,84 @@
 
     const maxDim = parseInt(maxDimInput.value, 10) || null;
     const mime = pickOutputMime(currentFormat, sourceFile.type);
+    const quality = DEFAULT_QUALITY[mime];
 
-    const origDim = Math.max(sourceImg.naturalWidth, sourceImg.naturalHeight);
+    const sourceW = sourceImg.naturalWidth;
+    const sourceH = sourceImg.naturalHeight;
+    const sourcePixels = sourceW * sourceH;
+    const origDim = Math.max(sourceW, sourceH);
     const needsShrink = maxDim && origDim > maxDim;
+    const sameFormat = mime === sourceFile.type;
 
     setStatus('busy', '<span class="spinner"></span>Resizing…');
     downloadBtn.disabled = true;
 
-    // Fast path: source already fits, and user isn't forcing a format or dim change
-    if (currentFormat === 'auto' && !needsShrink && sourceFile.size <= targetBytes) {
+    // Fast path: source already fits, no dim crop, no format conversion requested
+    if (!needsShrink && sourceFile.size <= targetBytes && (currentFormat === 'auto' || sameFormat)) {
       applyResult({
         blob: sourceFile,
-        width: sourceImg.naturalWidth,
-        height: sourceImg.naturalHeight,
-        mime: sourceFile.type,
-        quality: null,
+        width: sourceW, height: sourceH,
+        mime: sourceFile.type, quality: null,
         unchanged: true,
       });
       return;
     }
 
-    let width = sourceImg.naturalWidth;
-    let height = sourceImg.naturalHeight;
-    if (needsShrink) {
-      const scale = maxDim / origDim;
-      width = Math.max(1, Math.round(width * scale));
-      height = Math.max(1, Math.round(height * scale));
+    // Estimate target dimensions from bpp × target bytes
+    const bpp = estimateBpp(sourceFile.type, sourceFile.size, sourcePixels, mime);
+    const targetPixels = Math.min(sourcePixels, Math.max(1, targetBytes / bpp));
+    const scale = Math.sqrt(targetPixels / sourcePixels);
+    let w = Math.max(32, Math.round(sourceW * scale));
+    let h = Math.max(32, Math.round(sourceH * scale));
+
+    if (maxDim && Math.max(w, h) > maxDim) {
+      const s = maxDim / Math.max(w, h);
+      w = Math.max(32, Math.round(w * s));
+      h = Math.max(32, Math.round(h * s));
     }
 
-    const qualitySteps = [0.92, 0.85, 0.75, 0.6, 0.45, 0.3];
-    const minDim = 32;
-    let result = null;
-    let lastAttempt = null;
-
     try {
-      while (width >= minDim && height >= minDim) {
-        if (token !== runToken) return;
+      let blob = await drawAndEncode(w, h, mime, quality);
+      if (token !== runToken) return;
+      let attempt = { blob, width: w, height: h, mime, quality: quality ?? null };
 
-        if (mime === 'image/png') {
-          const blob = await drawAndEncode(width, height, mime, undefined);
-          lastAttempt = { blob, width, height, mime, quality: null };
-          if (blob.size <= targetBytes) { result = lastAttempt; break; }
-        } else {
-          let found = null;
-          for (const q of qualitySteps) {
-            if (token !== runToken) return;
-            const blob = await drawAndEncode(width, height, mime, q);
-            const attempt = { blob, width, height, mime, quality: q };
-            if (blob.size <= targetBytes) { found = attempt; break; }
-            lastAttempt = attempt;
-          }
-          if (found) { result = found; break; }
+      // Up to 2 correction passes. Shrink on overshoot, grow on big undershoot.
+      for (let i = 0; i < 2; i++) {
+        const ratio = blob.size / targetBytes;
+        if (ratio <= 1.0 && ratio >= 0.85) break;
+
+        const atSourceDim = w >= sourceW || h >= sourceH;
+        const atMaxDim = maxDim && Math.max(w, h) >= maxDim;
+        if (ratio < 0.85 && (atSourceDim || atMaxDim)) break;
+
+        const adjust = Math.sqrt(1 / ratio) * 0.97;
+        let newW = Math.max(32, Math.round(w * adjust));
+        let newH = Math.max(32, Math.round(h * adjust));
+        if (newW > sourceW || newH > sourceH) {
+          const c = Math.min(sourceW / w, sourceH / h);
+          newW = Math.round(w * c);
+          newH = Math.round(h * c);
         }
+        if (maxDim && Math.max(newW, newH) > maxDim) {
+          const c = maxDim / Math.max(newW, newH);
+          newW = Math.round(newW * c);
+          newH = Math.round(newH * c);
+        }
+        if (newW === w && newH === h) break;
 
-        width = Math.round(width * 0.8);
-        height = Math.round(height * 0.8);
+        w = newW; h = newH;
+        blob = await drawAndEncode(w, h, mime, quality);
+        if (token !== runToken) return;
+        attempt = { blob, width: w, height: h, mime, quality: quality ?? null };
       }
 
-      if (token !== runToken) return;
-
-      if (result) {
-        applyResult(result);
-      } else if (lastAttempt) {
+      if (blob.size > targetBytes) {
         applyResult(
-          lastAttempt,
-          `Couldn't hit ${targetMB} MB at minimum quality. Smallest output is ${formatBytes(lastAttempt.blob.size)} at ${lastAttempt.width}&times;${lastAttempt.height}.`
+          attempt,
+          `Couldn't hit ${targetMB} MB. Smallest try is ${formatBytes(blob.size)} at ${w}&times;${h}.`
         );
       } else {
-        setStatus('error', 'Could not produce any output.');
+        applyResult(attempt);
       }
     } catch (err) {
       if (token === runToken) setStatus('error', 'Encoding failed: ' + escapeHtml(err.message));
