@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Crop</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111418;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --border-strong: #cbd5e1;
+    --panel: #f8fafc;
+    --panel-active: #eff6ff;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #f1f5f9;
+    --info: #1e40af;
+    --info-bg: #eff6ff;
+    --info-border: #bfdbfe;
+    --success: #166534;
+    --success-bg: #f0fdf4;
+    --success-border: #bbf7d0;
+    --error: #b91c1c;
+    --error-bg: #fef2f2;
+    --error-border: #fecaca;
+    --paper-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 14px rgba(0,0,0,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eaed;
+      --muted: #9aa0a6;
+      --border: #262a30;
+      --border-strong: #3a3f47;
+      --panel: #14171c;
+      --panel-active: #17253f;
+      --accent: #60a5fa;
+      --accent-hover: #93c5fd;
+      --code-bg: #1a1f26;
+      --info: #93c5fd;
+      --info-bg: #0f1a2e;
+      --info-border: #1e3a5f;
+      --success: #86efac;
+      --success-bg: #0a1f14;
+      --success-border: #166534;
+      --error: #fca5a5;
+      --error-bg: #1f0e0f;
+      --error-border: #7f1d1d;
+      --paper-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 14px rgba(0,0,0,0.3);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 2rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 760px; }
+
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.5rem; }
+  h1 { font-size: 1.75rem; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+  .github-link { color: var(--muted); display: flex; }
+  .github-link:hover { color: var(--fg); text-decoration: none; }
+  p.lead { color: var(--muted); margin: 0 0 2rem; font-size: 0.95rem; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 0.12em 0.4em;
+    border-radius: 4px;
+  }
+
+  /* Drop zone */
+  .drop-zone {
+    display: block;
+    border: 2px dashed var(--border-strong);
+    border-radius: 12px;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    background: var(--panel);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .drop-zone.drag-over { transform: scale(1.005); }
+  .drop-zone:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  .drop-icon { width: 40px; height: 40px; color: var(--muted); margin-bottom: 0.75rem; }
+  .drop-text { font-size: 1rem; margin: 0 0 0.25rem; }
+  .drop-text strong { font-weight: 600; }
+  .drop-hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+
+  input[type="file"] {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* File bar (after upload) */
+  .file-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.7rem 0.95rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.9rem;
+  }
+  .file-bar-icon {
+    color: var(--muted);
+    display: flex;
+    flex-shrink: 0;
+  }
+  .file-bar-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.35;
+  }
+  .file-bar-info strong {
+    font-weight: 500;
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-bar-info .file-meta {
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+  .btn-link {
+    background: none;
+    border: 0;
+    color: var(--accent);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .btn-link:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  /* Toolbar */
+  .toolbar {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-btn:hover:not(:disabled) { border-color: var(--accent); }
+  .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .page-pos {
+    font-size: 0.85rem;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .page-pos input {
+    width: 3.2rem;
+    padding: 0.3rem 0.4rem;
+    text-align: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    outline: none;
+  }
+  .page-pos input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  .page-pos #pageCount { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .toolbar .spacer { flex: 1; }
+
+  .btn-secondary {
+    padding: 0.42rem 0.8rem;
+    font-size: 0.83rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--panel-active);
+  }
+  .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Preview stage */
+  .preview-wrap {
+    margin-top: 0.9rem;
+    padding: 1.5rem 1rem;
+    background:
+      repeating-conic-gradient(var(--panel) 0 25%, transparent 0 50%) 0 0/16px 16px,
+      var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 200px;
+    overflow: auto;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    .preview-wrap {
+      background:
+        repeating-conic-gradient(#0e1116 0 25%, transparent 0 50%) 0 0/16px 16px,
+        var(--panel);
+    }
+  }
+  .preview-stage {
+    position: relative;
+    display: inline-block;
+    background: #fff;
+    box-shadow: var(--paper-shadow);
+    line-height: 0;
+    touch-action: none;
+  }
+  .preview-stage canvas {
+    display: block;
+    max-width: 100%;
+  }
+  .preview-empty {
+    color: var(--muted);
+    font-size: 0.9rem;
+    padding: 2rem 1rem;
+    text-align: center;
+  }
+
+  /* Crop overlay */
+  .crop-cover {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .shade {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+  }
+  .crop-rect {
+    position: absolute;
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.6),
+      0 0 0 2px rgba(255,255,255,0.85);
+    cursor: move;
+    pointer-events: auto;
+    background: transparent;
+  }
+  .handle {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    background: #fff;
+    border: 1px solid #1f2937;
+    border-radius: 1px;
+    pointer-events: auto;
+    box-sizing: border-box;
+  }
+  .h-nw { top: -6px; left: -6px; cursor: nwse-resize; }
+  .h-ne { top: -6px; right: -6px; cursor: nesw-resize; }
+  .h-sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+  .h-se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+  .h-n  { top: -6px; left: 50%; margin-left: -5.5px; cursor: ns-resize; }
+  .h-s  { bottom: -6px; left: 50%; margin-left: -5.5px; cursor: ns-resize; }
+  .h-w  { left: -6px; top: 50%; margin-top: -5.5px; cursor: ew-resize; }
+  .h-e  { right: -6px; top: 50%; margin-top: -5.5px; cursor: ew-resize; }
+
+  /* Margin inputs */
+  .margins-grid {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.6rem;
+  }
+  @media (max-width: 520px) {
+    .margins-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .margin-input {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.7rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .margin-input:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  .margin-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-weight: 500;
+    flex-shrink: 0;
+    width: 3rem;
+  }
+  .margin-input input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+    outline: none;
+    padding: 0.15rem 0;
+    /* hide native spinner */
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+  .margin-input input::-webkit-outer-spin-button,
+  .margin-input input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .margin-input .unit {
+    font-size: 0.78rem;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  /* Action row */
+  .btn-row {
+    margin-top: 1.25rem;
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .btn-primary {
+    padding: 0.65rem 1.5rem;
+    font-size: 0.92rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Status */
+  .status {
+    margin-top: 1rem;
+    padding: 0.7rem 0.95rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    font-size: 0.88rem;
+    display: none;
+    line-height: 1.5;
+  }
+  .status.visible { display: block; }
+  .status.processing { border-color: var(--info-border); background: var(--info-bg); color: var(--info); }
+  .status.done { border-color: var(--success-border); background: var(--success-bg); color: var(--success); }
+  .status.error { border-color: var(--error-border); background: var(--error-bg); color: var(--error); }
+  .status-title { font-weight: 600; margin: 0 0 0.2rem; }
+  .status-body { margin: 0; opacity: 0.9; }
+  .status-body em { font-style: italic; }
+
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    margin-right: 0.5rem;
+    vertical-align: -1px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  details {
+    margin-top: 2rem;
+    font-size: 0.875rem;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 1.25rem;
+  }
+  details summary {
+    cursor: pointer;
+    user-select: none;
+    color: var(--fg);
+    font-weight: 500;
+  }
+  details p { margin: 0.75rem 0 0; }
+  details strong { color: var(--fg); }
+
+  footer {
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="page-header">
+    <h1>PDF Crop</h1>
+    <!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->
+  </div>
+  <p class="lead">Trim margins or focus on a region of every page.</p>
+
+  <label class="drop-zone" id="dropZone" for="fileInput">
+    <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="5" y="3" width="14" height="18" rx="2" ry="2"/>
+      <path d="M9 11h6"/>
+      <path d="M9 15h4"/>
+      <path d="M9 7h6"/>
+    </svg>
+    <p class="drop-text"><strong>Drop a PDF here</strong> or click to choose a file</p>
+    <p class="drop-hint">Pages render in your browser. Nothing uploads.</p>
+    <input type="file" id="fileInput" accept="application/pdf,.pdf">
+  </label>
+
+  <div class="editor" id="editor" hidden>
+    <div class="file-bar">
+      <span class="file-bar-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+      </span>
+      <span class="file-bar-info">
+        <strong id="fileName"></strong>
+        <span class="file-meta" id="fileMeta"></span>
+      </span>
+      <button class="btn-link" id="changeFileBtn" type="button">Choose another</button>
+    </div>
+
+    <div class="toolbar">
+      <button class="icon-btn" id="prevPageBtn" type="button" aria-label="Previous page" title="Previous page">‹</button>
+      <span class="page-pos">
+        Page <input id="pageInput" type="number" min="1" value="1"> of <span id="pageCount">—</span>
+      </span>
+      <button class="icon-btn" id="nextPageBtn" type="button" aria-label="Next page" title="Next page">›</button>
+      <span class="spacer"></span>
+      <button class="btn-secondary" id="autoCropBtn" type="button" title="Detect non-empty content area on the current page">Detect content</button>
+      <button class="btn-secondary" id="resetCropBtn" type="button">Reset</button>
+    </div>
+
+    <div class="preview-wrap" id="previewWrap">
+      <div class="preview-stage" id="previewStage">
+        <canvas id="pageCanvas"></canvas>
+        <div class="crop-cover" id="cropCover">
+          <div class="shade shade-top"    id="shadeTop"></div>
+          <div class="shade shade-bottom" id="shadeBottom"></div>
+          <div class="shade shade-left"   id="shadeLeft"></div>
+          <div class="shade shade-right"  id="shadeRight"></div>
+          <div class="crop-rect" id="cropRect" data-handle="move">
+            <div class="handle h-nw" data-handle="nw"></div>
+            <div class="handle h-n"  data-handle="n"></div>
+            <div class="handle h-ne" data-handle="ne"></div>
+            <div class="handle h-e"  data-handle="e"></div>
+            <div class="handle h-se" data-handle="se"></div>
+            <div class="handle h-s"  data-handle="s"></div>
+            <div class="handle h-sw" data-handle="sw"></div>
+            <div class="handle h-w"  data-handle="w"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="margins-grid">
+      <label class="margin-input">
+        <span class="margin-label">Top</span>
+        <input type="number" id="topInput" min="0" step="1" value="0">
+        <span class="unit">pt</span>
+      </label>
+      <label class="margin-input">
+        <span class="margin-label">Right</span>
+        <input type="number" id="rightInput" min="0" step="1" value="0">
+        <span class="unit">pt</span>
+      </label>
+      <label class="margin-input">
+        <span class="margin-label">Bottom</span>
+        <input type="number" id="bottomInput" min="0" step="1" value="0">
+        <span class="unit">pt</span>
+      </label>
+      <label class="margin-input">
+        <span class="margin-label">Left</span>
+        <input type="number" id="leftInput" min="0" step="1" value="0">
+        <span class="unit">pt</span>
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="downloadBtn" type="button" disabled>Crop &amp; download</button>
+    </div>
+  </div>
+
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <details>
+    <summary>About &amp; limitations</summary>
+    <p><strong>What this does:</strong> Sets a new <code>CropBox</code> on every page so that PDF viewers (and most subsequent print/export pipelines) display the trimmed region. The original page contents stay in the file — <code>CropBox</code> is non-destructive — so the crop can be undone with another tool. This makes it ideal for chopping margins off scanned books or letterboxed slides without re-rendering pages.</p>
+    <p><strong>How margins work:</strong> Each margin is a number in PDF points (1 pt = 1/72 inch). They're applied uniformly to every page, measured from each visible edge — so a rotated page is cropped from its <em>visual</em> top/right/bottom/left, not from its raw PDF coordinates.</p>
+    <p><strong>Privacy:</strong> Everything runs in your browser. The first run pulls ~2 MB of JS from <code>cdn.jsdelivr.net</code> for <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">pdf.js</a> and <a href="https://pdf-lib.js.org/" target="_blank" rel="noopener">pdf-lib</a>; both are cached afterward.</p>
+  </details>
+
+  <footer>
+    All data stays on your device.<br>
+    <!-- TOOL_META_START --><!-- TOOL_META_END -->
+    &middot; built with <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">pdf.js</a> &amp; <a href="https://pdf-lib.js.org/" target="_blank" rel="noopener">pdf-lib</a>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script type="module">
+  // pdf.js v4 ships ESM with a separate worker file. We load both from
+  // jsdelivr; setting workerSrc to a cross-origin URL is fine because
+  // jsdelivr serves with `Access-Control-Allow-Origin: *`. Avoid esm.sh
+  // for the same reason as in pdf-unlock — its Node `process` polyfill
+  // can confuse environment detection in WASM-adjacent libraries.
+  const PDFJS_VER = '4.0.379';
+  const pdfjsPromise = (async () => {
+    const lib = await import(`https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.min.mjs`);
+    lib.GlobalWorkerOptions.workerSrc =
+      `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.worker.min.mjs`;
+    return lib;
+  })();
+
+  // --- DOM ---------------------------------------------------------------
+  const dropZone     = document.getElementById('dropZone');
+  const fileInput    = document.getElementById('fileInput');
+  const editor       = document.getElementById('editor');
+  const fileNameEl   = document.getElementById('fileName');
+  const fileMetaEl   = document.getElementById('fileMeta');
+  const changeFileBtn= document.getElementById('changeFileBtn');
+  const prevPageBtn  = document.getElementById('prevPageBtn');
+  const nextPageBtn  = document.getElementById('nextPageBtn');
+  const pageInput    = document.getElementById('pageInput');
+  const pageCountEl  = document.getElementById('pageCount');
+  const autoCropBtn  = document.getElementById('autoCropBtn');
+  const resetCropBtn = document.getElementById('resetCropBtn');
+  const previewStage = document.getElementById('previewStage');
+  const previewWrap  = document.getElementById('previewWrap');
+  const canvas       = document.getElementById('pageCanvas');
+  const cropCover    = document.getElementById('cropCover');
+  const cropRect     = document.getElementById('cropRect');
+  const shadeTop     = document.getElementById('shadeTop');
+  const shadeBottom  = document.getElementById('shadeBottom');
+  const shadeLeft    = document.getElementById('shadeLeft');
+  const shadeRight   = document.getElementById('shadeRight');
+  const topInput     = document.getElementById('topInput');
+  const rightInput   = document.getElementById('rightInput');
+  const bottomInput  = document.getElementById('bottomInput');
+  const leftInput    = document.getElementById('leftInput');
+  const downloadBtn  = document.getElementById('downloadBtn');
+  const statusEl     = document.getElementById('status');
+
+  // --- State -------------------------------------------------------------
+  // crop margins in PDF points, measured from the *visual* edges of each
+  // page (i.e. after rotation). same value applied to every page.
+  let crop = { top: 0, right: 0, bottom: 0, left: 0 };
+
+  let pdfBytes   = null;   // raw PDF bytes for pdf-lib
+  let pdfDoc     = null;   // pdf.js PDFDocumentProxy
+  let pageCount  = 0;
+  let currentPage= 1;
+  let pdfPage    = null;   // pdf.js PageProxy for currentPage
+  let visualW    = 0;      // current page visual width in pt (post-rotation)
+  let visualH    = 0;
+  let renderScale= 1;      // CSS px per visual pt
+  let renderToken= 0;      // for cancelling stale renders
+  let currentFileName = '';
+
+  const MAX_PREVIEW_W = 700;   // CSS px
+  const MIN_CROP_PT   = 10;    // minimum crop rect size in points
+
+  // --- Helpers -----------------------------------------------------------
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+
+  function setStatus(kind, title, body) {
+    if (!kind) {
+      statusEl.className = 'status';
+      statusEl.innerHTML = '';
+      return;
+    }
+    statusEl.className = 'status visible ' + kind;
+    const titleHtml = kind === 'processing'
+      ? `<span class="spinner" aria-hidden="true"></span>${title}`
+      : title;
+    statusEl.innerHTML =
+      `<p class="status-title">${titleHtml}</p>` +
+      (body ? `<p class="status-body">${body}</p>` : '');
+  }
+
+  function formatSize(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  // --- File loading ------------------------------------------------------
+  async function loadFile(file) {
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+      setStatus('error', 'Not a PDF', 'Please choose a file with a <code>.pdf</code> extension.');
+      return;
+    }
+    setStatus('processing', `Loading ${escapeHtml(file.name)}…`, 'Parsing PDF and rendering preview.');
+
+    try {
+      const buf = await file.arrayBuffer();
+      // Keep a copy for pdf-lib; pdf.js claims the bytes it's given.
+      pdfBytes = new Uint8Array(buf.slice(0));
+
+      const pdfjs = await pdfjsPromise;
+      const task = pdfjs.getDocument({ data: new Uint8Array(buf) });
+      const doc  = await task.promise;
+      pdfDoc = doc;
+      pageCount = doc.numPages;
+      currentPage = 1;
+      currentFileName = file.name;
+
+      // Reset crop state when opening a new file.
+      crop = { top: 0, right: 0, bottom: 0, left: 0 };
+
+      fileNameEl.textContent = file.name;
+      fileMetaEl.textContent = `${pageCount} page${pageCount === 1 ? '' : 's'} · ${formatSize(file.size)}`;
+      pageCountEl.textContent = String(pageCount);
+      pageInput.max = String(pageCount);
+      pageInput.value = '1';
+
+      dropZone.hidden = true;
+      editor.hidden = false;
+      downloadBtn.disabled = false;
+      setStatus(null);
+
+      await renderPage(1);
+    } catch (err) {
+      console.error(err);
+      const msg = (err && err.message) ? err.message : String(err);
+      // pdf.js throws PasswordException when the file needs a password.
+      if (/password/i.test(msg)) {
+        setStatus('error', 'Password-protected PDF',
+          'This PDF is encrypted with a user password. Unlock it first (try the <a href="pdf-unlock.html">pdf-unlock</a> tool if it only has permission flags) and try again.');
+      } else {
+        setStatus('error', 'Could not open PDF', escapeHtml(msg));
+      }
+    }
+  }
+
+  // --- Rendering ---------------------------------------------------------
+  async function renderPage(n) {
+    if (!pdfDoc) return;
+    n = clamp(n, 1, pageCount);
+    currentPage = n;
+    pageInput.value = String(n);
+    prevPageBtn.disabled = n <= 1;
+    nextPageBtn.disabled = n >= pageCount;
+
+    const token = ++renderToken;
+    pdfPage = await pdfDoc.getPage(n);
+    if (token !== renderToken) return;
+
+    // Visual viewport at scale=1 — width/height are post-rotation in pt.
+    const v1 = pdfPage.getViewport({ scale: 1 });
+    visualW = v1.width;
+    visualH = v1.height;
+
+    const wrapW = previewWrap.clientWidth - 32; // padding allowance
+    const targetW = Math.min(MAX_PREVIEW_W, Math.max(280, wrapW));
+    renderScale = targetW / visualW;
+
+    const dpr = window.devicePixelRatio || 1;
+    const renderViewport = pdfPage.getViewport({ scale: renderScale * dpr });
+
+    canvas.width  = Math.floor(renderViewport.width);
+    canvas.height = Math.floor(renderViewport.height);
+    canvas.style.width  = (visualW * renderScale) + 'px';
+    canvas.style.height = (visualH * renderScale) + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await pdfPage.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+    if (token !== renderToken) return;
+
+    // Clamp crop to the new page's visual dims (in case of ragged pages).
+    crop.top    = clamp(crop.top,    0, Math.max(0, visualH - MIN_CROP_PT));
+    crop.bottom = clamp(crop.bottom, 0, Math.max(0, visualH - crop.top - MIN_CROP_PT));
+    crop.left   = clamp(crop.left,   0, Math.max(0, visualW - MIN_CROP_PT));
+    crop.right  = clamp(crop.right,  0, Math.max(0, visualW - crop.left - MIN_CROP_PT));
+
+    syncMarginInputs();
+    updateCropOverlay();
+  }
+
+  // --- Crop overlay rendering -------------------------------------------
+  function updateCropOverlay() {
+    if (!visualW || !visualH) return;
+    const s = renderScale;
+    const t = clamp(crop.top,    0, visualH) * s;
+    const r = clamp(crop.right,  0, visualW) * s;
+    const b = clamp(crop.bottom, 0, visualH) * s;
+    const l = clamp(crop.left,   0, visualW) * s;
+
+    cropRect.style.left   = l + 'px';
+    cropRect.style.top    = t + 'px';
+    cropRect.style.right  = r + 'px';
+    cropRect.style.bottom = b + 'px';
+
+    shadeTop.style.left   = '0';
+    shadeTop.style.right  = '0';
+    shadeTop.style.top    = '0';
+    shadeTop.style.height = t + 'px';
+
+    shadeBottom.style.left   = '0';
+    shadeBottom.style.right  = '0';
+    shadeBottom.style.bottom = '0';
+    shadeBottom.style.height = b + 'px';
+
+    shadeLeft.style.left   = '0';
+    shadeLeft.style.top    = t + 'px';
+    shadeLeft.style.bottom = b + 'px';
+    shadeLeft.style.width  = l + 'px';
+
+    shadeRight.style.right = '0';
+    shadeRight.style.top   = t + 'px';
+    shadeRight.style.bottom= b + 'px';
+    shadeRight.style.width = r + 'px';
+  }
+
+  function syncMarginInputs() {
+    topInput.value    = Math.round(crop.top);
+    rightInput.value  = Math.round(crop.right);
+    bottomInput.value = Math.round(crop.bottom);
+    leftInput.value   = Math.round(crop.left);
+  }
+
+  // --- Drag / resize interaction ----------------------------------------
+  // Each pointerdown on the crop rect or a handle starts a gesture that
+  // adjusts the four margins. dx/dy come in CSS pixels and are scaled to
+  // points via renderScale.
+  function attachDrag() {
+    cropCover.addEventListener('pointerdown', (e) => {
+      const target = e.target.closest('[data-handle]');
+      if (!target) return;
+      const mode = target.dataset.handle; // 'move'|'nw'|'n'|'ne'|'e'|'se'|'s'|'sw'|'w'
+      e.preventDefault();
+      target.setPointerCapture?.(e.pointerId);
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const start  = { ...crop };
+
+      function onMove(ev) {
+        const dxPt = (ev.clientX - startX) / renderScale;
+        const dyPt = (ev.clientY - startY) / renderScale;
+
+        let { top: nt, right: nr, bottom: nb, left: nl } = start;
+
+        if (mode === 'move') {
+          // Shift the rect; left and right margins must stay non-negative.
+          const sx = clamp(dxPt, -start.left, start.right);
+          const sy = clamp(dyPt, -start.top,  start.bottom);
+          nl = start.left   + sx;
+          nr = start.right  - sx;
+          nt = start.top    + sy;
+          nb = start.bottom - sy;
+        } else {
+          if (mode.includes('n')) {
+            nt = clamp(start.top + dyPt, 0, visualH - start.bottom - MIN_CROP_PT);
+          }
+          if (mode.includes('s')) {
+            nb = clamp(start.bottom - dyPt, 0, visualH - start.top - MIN_CROP_PT);
+          }
+          if (mode.includes('w')) {
+            nl = clamp(start.left + dxPt, 0, visualW - start.right - MIN_CROP_PT);
+          }
+          if (mode.includes('e')) {
+            nr = clamp(start.right - dxPt, 0, visualW - start.left - MIN_CROP_PT);
+          }
+        }
+
+        crop = { top: nt, right: nr, bottom: nb, left: nl };
+        updateCropOverlay();
+        syncMarginInputs();
+      }
+
+      function onUp(ev) {
+        target.releasePointerCapture?.(e.pointerId);
+        target.removeEventListener('pointermove', onMove);
+        target.removeEventListener('pointerup', onUp);
+        target.removeEventListener('pointercancel', onUp);
+      }
+
+      target.addEventListener('pointermove', onMove);
+      target.addEventListener('pointerup', onUp);
+      target.addEventListener('pointercancel', onUp);
+    });
+  }
+
+  // --- Margin inputs → state --------------------------------------------
+  function readMarginInputs() {
+    const t = Math.max(0, parseFloat(topInput.value)    || 0);
+    const r = Math.max(0, parseFloat(rightInput.value)  || 0);
+    const b = Math.max(0, parseFloat(bottomInput.value) || 0);
+    const l = Math.max(0, parseFloat(leftInput.value)   || 0);
+
+    // Constrain horizontally and vertically so the crop stays valid.
+    const hSum = l + r;
+    const vSum = t + b;
+    const hMax = Math.max(0, visualW - MIN_CROP_PT);
+    const vMax = Math.max(0, visualH - MIN_CROP_PT);
+
+    let nl = l, nr = r, nt = t, nb = b;
+    if (hSum > hMax) {
+      const k = hMax / hSum;
+      nl = l * k; nr = r * k;
+    }
+    if (vSum > vMax) {
+      const k = vMax / vSum;
+      nt = t * k; nb = b * k;
+    }
+    crop = { top: nt, right: nr, bottom: nb, left: nl };
+    updateCropOverlay();
+  }
+
+  [topInput, rightInput, bottomInput, leftInput].forEach(inp => {
+    inp.addEventListener('input', () => {
+      readMarginInputs();
+    });
+    inp.addEventListener('blur', () => {
+      // Reflect any clamp/normalization back to the input.
+      syncMarginInputs();
+    });
+  });
+
+  // --- Auto-detect content ----------------------------------------------
+  // Scans the rendered canvas for non-near-white pixels and sets the
+  // margins to the bounding box of content. Threshold is intentionally
+  // permissive (240/255) so anti-aliased text edges don't get clipped.
+  function autoDetectContent() {
+    if (!canvas.width || !canvas.height) return;
+    const ctx = canvas.getContext('2d');
+    let data;
+    try {
+      data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    } catch (err) {
+      setStatus('error', 'Cannot scan canvas', escapeHtml(err.message));
+      return;
+    }
+    const W = canvas.width, H = canvas.height;
+    const TH = 240;
+
+    function rowFilled(y) {
+      const off = y * W * 4;
+      for (let x = 0; x < W; x++) {
+        const i = off + x * 4;
+        if (data[i] < TH || data[i+1] < TH || data[i+2] < TH) return true;
+      }
+      return false;
+    }
+    function colFilled(x) {
+      for (let y = 0; y < H; y++) {
+        const i = (y * W + x) * 4;
+        if (data[i] < TH || data[i+1] < TH || data[i+2] < TH) return true;
+      }
+      return false;
+    }
+
+    let top = 0, bottom = H - 1, left = 0, right = W - 1;
+    while (top    < H        && !rowFilled(top))    top++;
+    while (bottom > top      && !rowFilled(bottom)) bottom--;
+    while (left   < W        && !colFilled(left))   left++;
+    while (right  > left     && !colFilled(right))  right--;
+
+    if (top >= bottom || left >= right) {
+      setStatus('error', 'No content detected',
+        'The page looks blank — auto-detect skipped. Drag the crop handles instead.');
+      return;
+    }
+
+    // Convert canvas-pixel margins to visual-point margins. The canvas
+    // drawing buffer is renderScale*dpr px per pt, so:
+    const dpr = window.devicePixelRatio || 1;
+    const pxPerPt = renderScale * dpr;
+    crop = {
+      top:    top / pxPerPt,
+      bottom: (H - 1 - bottom) / pxPerPt,
+      left:   left / pxPerPt,
+      right:  (W - 1 - right) / pxPerPt,
+    };
+    syncMarginInputs();
+    updateCropOverlay();
+    setStatus(null);
+  }
+
+  // --- Apply & download --------------------------------------------------
+  // For each page we ask pdf.js for its scale-1 viewport (which honors
+  // page rotation), build a visual rect from the four margins, then map
+  // its corners back into the page's unrotated PDF coordinate system via
+  // viewport.convertToPdfPoint. The bbox of the converted corners is the
+  // CropBox we hand to pdf-lib.
+  async function applyAndDownload() {
+    if (!pdfDoc || !pdfBytes) return;
+    if (typeof PDFLib === 'undefined') {
+      setStatus('error', 'pdf-lib failed to load',
+        'Refresh the page; the CDN may have been blocked.');
+      return;
+    }
+
+    const noCrop = !crop.top && !crop.right && !crop.bottom && !crop.left;
+    setStatus('processing',
+      `Cropping ${escapeHtml(currentFileName)}…`,
+      `Setting CropBox on ${pageCount} page${pageCount === 1 ? '' : 's'}.`);
+    downloadBtn.disabled = true;
+
+    try {
+      // Compute per-page CropBox in unrotated PDF coords.
+      const cropBoxes = [];
+      for (let i = 1; i <= pageCount; i++) {
+        const page = await pdfDoc.getPage(i);
+        const vp = page.getViewport({ scale: 1 });
+        const vw = vp.width, vh = vp.height;
+        const x0 = clamp(crop.left, 0, vw - 1);
+        const y0 = clamp(crop.top,  0, vh - 1);
+        const x1 = clamp(vw - crop.right,  x0 + MIN_CROP_PT, vw);
+        const y1 = clamp(vh - crop.bottom, y0 + MIN_CROP_PT, vh);
+
+        const [px0, py0] = vp.convertToPdfPoint(x0, y0);
+        const [px1, py1] = vp.convertToPdfPoint(x1, y1);
+        const cx = Math.min(px0, px1);
+        const cy = Math.min(py0, py1);
+        const cw = Math.abs(px1 - px0);
+        const ch = Math.abs(py1 - py0);
+        cropBoxes.push({ x: cx, y: cy, w: cw, h: ch });
+        page.cleanup?.();
+      }
+
+      const pdfLibDoc = await PDFLib.PDFDocument.load(pdfBytes, {
+        // Lossless-ish: keep object IDs stable for diffability.
+        ignoreEncryption: false,
+      });
+      const pages = pdfLibDoc.getPages();
+      for (let i = 0; i < pages.length; i++) {
+        const cb = cropBoxes[i];
+        if (cb.w > 0 && cb.h > 0) pages[i].setCropBox(cb.x, cb.y, cb.w, cb.h);
+      }
+      const outBytes = await pdfLibDoc.save({ useObjectStreams: false });
+
+      const baseName = currentFileName.replace(/\.pdf$/i, '');
+      const outName = noCrop ? `${baseName}.pdf` : `${baseName}_cropped.pdf`;
+      const blob = new Blob([outBytes], { type: 'application/pdf' });
+      const url  = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = outName;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+      setStatus('done',
+        `Done — downloaded ${escapeHtml(outName)}`,
+        `${pageCount} page${pageCount === 1 ? '' : 's'} · ${formatSize(outBytes.length)}` +
+        (noCrop ? ' · <em>no margins set, file is unchanged</em>' : ''));
+    } catch (err) {
+      console.error(err);
+      setStatus('error', 'Could not save PDF', escapeHtml(err.message || String(err)));
+    } finally {
+      downloadBtn.disabled = false;
+    }
+  }
+
+  // --- Events ------------------------------------------------------------
+  fileInput.addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) loadFile(f);
+    fileInput.value = '';
+  });
+
+  ['dragenter', 'dragover'].forEach(n => {
+    dropZone.addEventListener(n, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(n => {
+    dropZone.addEventListener(n, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+    });
+  });
+  dropZone.addEventListener('drop', (e) => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  // Block the browser's default "open file" behavior for stray drops
+  // outside the zone — otherwise dropping near the window edge replaces
+  // the page with the PDF.
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop',     (e) => e.preventDefault());
+
+  changeFileBtn.addEventListener('click', () => fileInput.click());
+
+  prevPageBtn.addEventListener('click', () => renderPage(currentPage - 1));
+  nextPageBtn.addEventListener('click', () => renderPage(currentPage + 1));
+  pageInput.addEventListener('change', () => {
+    const n = parseInt(pageInput.value, 10);
+    if (Number.isFinite(n)) renderPage(n);
+    else pageInput.value = String(currentPage);
+  });
+
+  autoCropBtn.addEventListener('click', autoDetectContent);
+  resetCropBtn.addEventListener('click', () => {
+    crop = { top: 0, right: 0, bottom: 0, left: 0 };
+    syncMarginInputs();
+    updateCropOverlay();
+  });
+
+  downloadBtn.addEventListener('click', applyAndDownload);
+
+  // Re-render on resize so the preview keeps fitting the wrap width.
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (!pdfDoc) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => renderPage(currentPage), 120);
+  });
+
+  attachDrag();
+</script>
+</body>
+</html>
