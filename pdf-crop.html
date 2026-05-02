@@ -557,7 +557,7 @@
 
   <details>
     <summary>About &amp; limitations</summary>
-    <p><strong>What this does:</strong> Sets a new <code>CropBox</code> on every page so that PDF viewers (and most subsequent print/export pipelines) display the trimmed region. The original page contents stay in the file — <code>CropBox</code> is non-destructive — so the crop can be undone with another tool. This makes it ideal for chopping margins off scanned books or letterboxed slides without re-rendering pages.</p>
+    <p><strong>What this does:</strong> Replaces the page rectangle (<code>MediaBox</code>) on every page so the trimmed region is what every downstream tool sees — viewers, printers, and rasterizers like <code>pdftoppm</code> or Ghostscript. The original content stream stays intact, so quality is identical to the source and text remains selectable; the trimmed area is just no longer part of the visible page. Ideal for chopping margins off scanned books or letterboxed slides without re-rendering.</p>
     <p><strong>How margins work:</strong> Each margin is a number in PDF points (1 pt = 1/72 inch). They're applied uniformly to every page, measured from each visible edge — so a rotated page is cropped from its <em>visual</em> top/right/bottom/left, not from its raw PDF coordinates.</p>
     <p><strong>Privacy:</strong> Everything runs in your browser. The first run pulls ~2 MB of JS from <code>cdn.jsdelivr.net</code> for <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">pdf.js</a> and <a href="https://pdf-lib.js.org/" target="_blank" rel="noopener">pdf-lib</a>; both are cached afterward.</p>
   </details>
@@ -1007,7 +1007,18 @@
       const pages = pdfLibDoc.getPages();
       for (let i = 0; i < pages.length; i++) {
         const cb = cropBoxes[i];
-        if (cb.w > 0 && cb.h > 0) pages[i].setCropBox(cb.x, cb.y, cb.w, cb.h);
+        if (cb.w <= 0 || cb.h <= 0) continue;
+        // CropBox alone is just a viewer hint — pdftoppm, Ghostscript, and
+        // ImageMagick all rasterize the MediaBox, so a CropBox-only crop
+        // looks fine in viewers but extracts as the full original page.
+        // Collapse all five boxes onto the crop rect; the others (Bleed/
+        // Trim/Art) might otherwise extend past the new MediaBox and make
+        // the PDF technically invalid.
+        pages[i].setMediaBox(cb.x, cb.y, cb.w, cb.h);
+        pages[i].setCropBox (cb.x, cb.y, cb.w, cb.h);
+        pages[i].setBleedBox(cb.x, cb.y, cb.w, cb.h);
+        pages[i].setTrimBox (cb.x, cb.y, cb.w, cb.h);
+        pages[i].setArtBox  (cb.x, cb.y, cb.w, cb.h);
       }
       const outBytes = await pdfLibDoc.save({ useObjectStreams: false });
 
