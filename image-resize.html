@@ -117,7 +117,7 @@
     gap: 0.4rem;
     flex-wrap: wrap;
   }
-  .preset-btn, .format-btn {
+  .preset-btn, .format-btn, .unit-btn {
     padding: 0.4rem 0.85rem;
     font-size: 0.82rem;
     font-family: inherit;
@@ -129,11 +129,11 @@
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
   }
-  .preset-btn:hover, .format-btn:hover {
+  .preset-btn:hover, .format-btn:hover, .unit-btn:hover {
     border-color: var(--accent);
     background: var(--panel-active);
   }
-  .preset-btn.active, .format-btn.active {
+  .preset-btn.active, .format-btn.active, .unit-btn.active {
     border-color: var(--accent);
     background: var(--accent);
     color: #fff;
@@ -160,7 +160,8 @@
     border-color: var(--accent);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
   }
-  .unit { font-size: 0.9rem; color: var(--muted); }
+  .unit-row { display: flex; gap: 0.25rem; }
+  .unit-btn { padding: 0.5rem 0.7rem; }
 
   details.advanced {
     margin-top: 1.25rem;
@@ -349,7 +350,10 @@
       </div>
       <div class="size-row">
         <input type="number" id="targetInput" value="15" step="0.1" min="0.01">
-        <span class="unit">MB</span>
+        <div class="unit-row" id="unitRow">
+          <button type="button" class="unit-btn active" data-unit="mb">MB</button>
+          <button type="button" class="unit-btn" data-unit="kb">KB</button>
+        </div>
       </div>
     </div>
 
@@ -410,6 +414,7 @@
   const presetRow = document.getElementById('presetRow');
   const formatRow = document.getElementById('formatRow');
   const targetInput = document.getElementById('targetInput');
+  const unitRow = document.getElementById('unitRow');
   const maxDimInput = document.getElementById('maxDimInput');
   const sourcePreview = document.getElementById('sourcePreview');
   const outputPreview = document.getElementById('outputPreview');
@@ -436,6 +441,27 @@
     if (n < 1_000_000) return Math.round(n / 1000) + ' KB';
     if (n < 10_000_000) return (n / 1e6).toFixed(2) + ' MB';
     return (n / 1e6).toFixed(1) + ' MB';
+  }
+
+  function currentUnit() {
+    return unitRow.querySelector('.unit-btn.active').dataset.unit;
+  }
+
+  function unitToBytes(value, unit) {
+    return Math.round(value * (unit === 'kb' ? 1000 : 1e6));
+  }
+
+  function setUnit(newUnit) {
+    unitRow.querySelectorAll('.unit-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.unit === newUnit);
+    });
+    if (newUnit === 'kb') {
+      targetInput.step = '10';
+      targetInput.min = '1';
+    } else {
+      targetInput.step = '0.1';
+      targetInput.min = '0.01';
+    }
   }
 
   function mimeToExt(mime) {
@@ -544,9 +570,10 @@
     if (!sourceImg || !sourceFile) return;
     const token = ++runToken;
 
-    const targetMB = parseFloat(targetInput.value);
-    if (!Number.isFinite(targetMB) || targetMB <= 0) return;
-    const targetBytes = Math.round(targetMB * 1e6);
+    const targetValue = parseFloat(targetInput.value);
+    if (!Number.isFinite(targetValue) || targetValue <= 0) return;
+    const unit = currentUnit();
+    const targetBytes = unitToBytes(targetValue, unit);
 
     const maxDim = parseInt(maxDimInput.value, 10) || null;
     const mime = pickOutputMime(currentFormat, sourceFile.type);
@@ -624,7 +651,7 @@
       if (blob.size > targetBytes) {
         applyResult(
           attempt,
-          `Couldn't hit ${targetMB} MB. Smallest try is ${formatBytes(blob.size)} at ${w}&times;${h}.`
+          `Couldn't hit ${targetValue} ${unit.toUpperCase()}. Smallest try is ${formatBytes(blob.size)} at ${w}&times;${h}.`
         );
       } else {
         applyResult(attempt);
@@ -650,8 +677,10 @@
     outputPreview.style.display = '';
     outputPreview.src = outputUrl;
 
-    const targetMB = parseFloat(targetInput.value);
-    const pct = targetMB ? Math.round(result.blob.size / (targetMB * 1e6) * 100) : null;
+    const targetValue = parseFloat(targetInput.value);
+    const targetBytes = Number.isFinite(targetValue) && targetValue > 0
+      ? unitToBytes(targetValue, currentUnit()) : null;
+    const pct = targetBytes ? Math.round(result.blob.size / targetBytes * 100) : null;
     const parts = [];
     parts.push(`<strong>${escapeHtml(outputName)}</strong>`);
     let line2 = `${result.width}&times;${result.height} &middot; ${formatBytes(result.blob.size)}`;
@@ -673,10 +702,11 @@
 
   function syncPresetFromInput() {
     const value = targetInput.value;
+    const isMB = currentUnit() === 'mb';
     let matched = null;
     presetRow.querySelectorAll('.preset-btn').forEach(b => {
       b.classList.remove('active');
-      if (b.dataset.mb && b.dataset.mb === value) matched = b;
+      if (isMB && b.dataset.mb && b.dataset.mb === value) matched = b;
     });
     (matched || presetRow.querySelector('[data-preset="custom"]')).classList.add('active');
   }
@@ -710,11 +740,32 @@
     presetRow.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     if (btn.dataset.mb) {
+      setUnit('mb');
       targetInput.value = btn.dataset.mb;
     } else {
       targetInput.focus();
       targetInput.select();
     }
+    scheduleRun();
+  });
+
+  unitRow.addEventListener('click', e => {
+    const btn = e.target.closest('.unit-btn');
+    if (!btn) return;
+    const newUnit = btn.dataset.unit;
+    const oldUnit = currentUnit();
+    if (newUnit === oldUnit) return;
+
+    const v = parseFloat(targetInput.value);
+    if (Number.isFinite(v) && v > 0) {
+      if (newUnit === 'kb' && oldUnit === 'mb') {
+        targetInput.value = +(v * 1000).toFixed(2);
+      } else if (newUnit === 'mb' && oldUnit === 'kb') {
+        targetInput.value = +(v / 1000).toFixed(3);
+      }
+    }
+    setUnit(newUnit);
+    syncPresetFromInput();
     scheduleRun();
   });
 
