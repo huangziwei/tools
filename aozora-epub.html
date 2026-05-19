@@ -542,6 +542,26 @@
       // Indentation prefix: ［＃N字下げ］ (single line)
       raw = raw.replace(/［＃[０-９0-9]+字下げ］/g, '');
 
+      // Postfix heading form: TEXT［＃「TEXT」は<大|中|小>見出し］. Many
+      // Aozora works (e.g. 漱石『吾輩は猫である』, 寅彦『柿の種』) use this
+      // instead of the wrapped ［＃大見出し］...［＃大見出し終わり］ form.
+      // Without this, those works produce no TOC. The preceding text may
+      // contain ｜/《》 ruby markup; compare against the bracketed plain
+      // form after stripping markup, but render the raw form so
+      // convertAozoraLine can emit <ruby> in the heading.
+      var postfixHead = raw.match(/^(.*?)［＃「([^」]+)」は([大中小])見出し］\s*$/);
+      if (postfixHead) {
+        var phRaw = postfixHead[1].trim();
+        var phPlain = phRaw.replace(/《[^》]*》/g, '').replace(/｜/g, '');
+        if (phPlain === postfixHead[2]) {
+          headingId++;
+          var phLevel = postfixHead[3] === '大' ? 2 : postfixHead[3] === '中' ? 3 : 4;
+          tocEntries.push({ id: 'h' + headingId, level: phLevel, text: phPlain });
+          html += '<h' + phLevel + ' id="h' + headingId + '">' + convertAozoraLine(phRaw) + '</h' + phLevel + '>\n';
+          continue;
+        }
+      }
+
       // Empty line → break
       if (!raw.trim()) {
         html += '<p><br/></p>\n';
