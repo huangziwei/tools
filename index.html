@@ -112,6 +112,54 @@
   .search input:focus + kbd,
   .search input:not(:placeholder-shown) + kbd { display: none; }
 
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 0.75rem;
+    margin: 0.85rem 0 0.25rem;
+  }
+  .pills { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .pill {
+    font: inherit;
+    font-size: 0.8rem;
+    line-height: 1;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .pill:hover { border-color: var(--accent); color: var(--fg); }
+  .pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .sortbar { display: flex; align-items: center; gap: 0.45rem; }
+  .sort-label { font-size: 0.78rem; color: var(--muted); }
+  .sort {
+    display: inline-flex;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .sort-btn {
+    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1;
+    padding: 0.35rem 0.65rem;
+    border: none;
+    border-left: 1px solid var(--border-strong);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .sort-btn:first-child { border-left: none; }
+  .sort-btn:hover { color: var(--fg); }
+  .sort-btn.active { background: var(--accent); color: #fff; }
+
   ul.tools {
     list-style: none;
     padding: 0;
@@ -125,6 +173,17 @@
     border-bottom: 1px solid var(--border);
   }
   ul.tools > li[hidden] { display: none; }
+  ul.tools > li.group-header {
+    border-top: 1px solid var(--border);
+    padding: 1.1rem 0 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+  /* first tool under a header doesn't need its own divider */
+  ul.tools > li.group-header + li { border-top: none; }
   ul.tools h2 {
     font-size: 1.05rem;
     font-weight: 600;
@@ -181,54 +240,66 @@
     <kbd aria-hidden="true">/</kbd>
   </div>
 
+  <div class="filters">
+    <div class="pills" id="pills" role="group" aria-label="Filter tools by category"></div>
+    <div class="sortbar">
+      <span class="sort-label">Sort</span>
+      <div class="sort" id="sort" role="group" aria-label="Sort tools">
+        <button type="button" class="sort-btn active" data-sort="recent">Recent</button>
+        <button type="button" class="sort-btn" data-sort="az">A&ndash;Z</button>
+        <button type="button" class="sort-btn" data-sort="grouped">Grouped</button>
+      </div>
+    </div>
+  </div>
+
   <ul class="tools" id="tools">
     <!-- TOOLS_LIST_START -->
-    <li>
+    <li data-category="Images">
       <h2><a href="drop-shadow.html">Drop Shadow</a></h2>
       <p>Wrap a screenshot or image in macOS&#39;s window drop shadow.</p>
       <p class="meta"><time datetime="2026-05-25T08:17:18+02:00">Added 2026/05/25 08:17</time></p>
     </li>
-    <li>
+    <li data-category="Ebooks">
       <h2><a href="aozora-epub.html">Aozora to EPUB</a></h2>
       <p>Convert Aozora Bunko files to vertical-layout EPUB.</p>
       <p class="meta"><time datetime="2026-05-19T22:54:43+02:00">Updated at 2026/05/19 22:54</time></p>
     </li>
-    <li>
+    <li data-category="Images">
       <h2><a href="image-resize.html">Image Resizer</a></h2>
       <p>Shrink an image to fit a platform&#39;s upload size limit.</p>
       <p class="meta"><time datetime="2026-05-11T08:58:06+02:00">Updated at 2026/05/11 08:58</time></p>
     </li>
-    <li>
+    <li data-category="PDF">
       <h2><a href="pdf-crop.html">PDF Crop</a></h2>
       <p>Trim margins or focus on a region of every page.</p>
       <p class="meta"><time datetime="2026-05-02T19:03:00+02:00">Updated at 2026/05/02 19:03</time></p>
     </li>
-    <li>
+    <li data-category="Fun">
       <h2><a href="745noirs.html">745 Noirs</a></h2>
       <p>Every film in Michael Keaney&#39;s Film Noir Guide (1940–1959), tiled by poster.</p>
       <p class="meta"><time datetime="2026-04-23T12:22:49+02:00">Updated at 2026/04/23 12:22</time></p>
     </li>
-    <li>
+    <li data-category="Ebooks">
       <h2><a href="epub2md.html">EPUB to Markdown</a></h2>
       <p>Convert an EPUB to Markdown in reading order.</p>
       <p class="meta"><time datetime="2026-04-16T21:25:29+02:00">Updated at 2026/04/16 21:25</time></p>
     </li>
-    <li>
+    <li data-category="Images">
       <h2><a href="placard.html">Placard</a></h2>
       <p>Make text placards in the style of nostalgic HK lyrics billboards.</p>
       <p class="meta"><time datetime="2026-04-15T13:26:39+02:00">Updated at 2026/04/15 13:26</time></p>
     </li>
-    <li>
+    <li data-category="Web &amp; Text">
       <h2><a href="url-extractor.html">URL Extractor</a></h2>
       <p>Paste page source to extract URLs.</p>
       <p class="meta"><time datetime="2026-04-13T09:30:36+02:00">Updated at 2026/04/13 09:30</time></p>
     </li>
-    <li>
+    <li data-category="PDF">
       <h2><a href="pdf-unlock.html">PDF Permissions Unlocker</a></h2>
       <p>Remove print, copy, and edit restrictions from PDFs.</p>
       <p class="meta"><time datetime="2026-04-13T09:26:21+02:00">Updated at 2026/04/13 09:26</time></p>
     </li>
-    <li>
+    <li data-category="Images">
       <h2><a href="qr-code.html">QR Code Generator</a></h2>
       <p>Generate QR codes with optional logo and decorative frames.</p>
       <p class="meta"><time datetime="2026-04-13T09:26:21+02:00">Updated at 2026/04/13 09:26</time></p>
@@ -243,24 +314,97 @@
 
 <script>
   (() => {
+    const ul = document.getElementById('tools');
     const input = document.getElementById('search');
     const empty = document.getElementById('empty');
     const emptyQuery = document.getElementById('emptyQuery');
-    const items = Array.from(document.querySelectorAll('#tools > li')).map((el) => ({
-      el,
-      text: el.textContent.toLowerCase().replace(/\s+/g, ' '),
-    }));
+    const pillsEl = document.getElementById('pills');
+    const sortEl = document.getElementById('sort');
 
-    function filter() {
+    const FALLBACK = 'Other';
+    // Capture tool items once, before any group headers are injected.
+    const items = Array.from(ul.querySelectorAll('li')).map((el) => {
+      const a = el.querySelector('h2 a');
+      const t = el.querySelector('time');
+      return {
+        el,
+        title: (a ? a.textContent : el.textContent).trim(),
+        category: (el.dataset.category || FALLBACK).trim(),
+        date: t ? (Date.parse(t.getAttribute('datetime')) || 0) : 0,
+        text: el.textContent.toLowerCase().replace(/\s+/g, ' '),
+      };
+    });
+
+    let activeCat = 'all';
+    let sortMode = 'recent';
+
+    // Category order: the group holding the newest tool comes first; ties A–Z.
+    // Derived from the items themselves, so a new category needs no code change.
+    const newest = new Map();
+    for (const it of items) {
+      newest.set(it.category, Math.max(newest.get(it.category) || 0, it.date));
+    }
+    const categories = [...newest.keys()].sort(
+      (a, b) => (newest.get(b) - newest.get(a)) || a.localeCompare(b)
+    );
+
+    function addPill(label, value) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pill' + (value === activeCat ? ' active' : '');
+      b.textContent = label;
+      b.dataset.cat = value;
+      b.setAttribute('aria-pressed', value === activeCat ? 'true' : 'false');
+      pillsEl.appendChild(b);
+    }
+    addPill('All', 'all');
+    for (const c of categories) addPill(c, c);
+
+    function render() {
       const query = input.value.trim().toLowerCase();
       const terms = query.split(/\s+/).filter(Boolean);
-      let visible = 0;
-      for (const { el, text } of items) {
-        const match = terms.every((t) => text.includes(t));
-        el.hidden = !match;
-        if (match) visible++;
+
+      ul.querySelectorAll('li.group-header').forEach((h) => h.remove());
+
+      const matched = items.filter((it) =>
+        (activeCat === 'all' || it.category === activeCat) &&
+        terms.every((t) => it.text.includes(t))
+      );
+      for (const it of items) it.el.hidden = true;
+
+      if (sortMode === 'grouped') {
+        const groups = new Map();
+        for (const it of matched) {
+          if (!groups.has(it.category)) groups.set(it.category, []);
+          groups.get(it.category).push(it);
+        }
+        const order = [
+          ...categories.filter((c) => groups.has(c)),
+          ...[...groups.keys()].filter((c) => !categories.includes(c)),
+        ];
+        for (const c of order) {
+          const header = document.createElement('li');
+          header.className = 'group-header';
+          header.textContent = c;
+          ul.appendChild(header);
+          for (const it of groups.get(c).sort((a, b) => b.date - a.date)) {
+            it.el.hidden = false;
+            ul.appendChild(it.el);
+          }
+        }
+      } else {
+        const ordered = matched.slice().sort(
+          sortMode === 'az'
+            ? (a, b) => a.title.localeCompare(b.title)
+            : (a, b) => b.date - a.date
+        );
+        for (const it of ordered) {
+          it.el.hidden = false;
+          ul.appendChild(it.el);
+        }
       }
-      if (query && visible === 0) {
+
+      if (query && matched.length === 0) {
         emptyQuery.textContent = query;
         empty.hidden = false;
       } else {
@@ -268,11 +412,33 @@
       }
     }
 
-    input.addEventListener('input', filter);
+    pillsEl.addEventListener('click', (e) => {
+      const b = e.target.closest('.pill');
+      if (!b) return;
+      activeCat = b.dataset.cat;
+      pillsEl.querySelectorAll('.pill').forEach((p) => {
+        const on = p === b;
+        p.classList.toggle('active', on);
+        p.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      render();
+    });
+
+    sortEl.addEventListener('click', (e) => {
+      const b = e.target.closest('.sort-btn');
+      if (!b) return;
+      sortMode = b.dataset.sort;
+      sortEl.querySelectorAll('.sort-btn').forEach((s) =>
+        s.classList.toggle('active', s === b)
+      );
+      render();
+    });
+
+    input.addEventListener('input', render);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         input.value = '';
-        filter();
+        render();
         input.blur();
       }
     });
@@ -287,6 +453,8 @@
       input.focus();
       input.select();
     });
+
+    render();
   })();
 </script>
 </body>

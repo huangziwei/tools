@@ -77,6 +77,11 @@ function extractDescription(html) {
   return '';
 }
 
+function extractCategory(html) {
+  const m = html.match(/<meta\s+name=["']category["']\s+content=["']([^"']*)["']/i);
+  return m ? m[1].trim() : '';
+}
+
 function stripTags(s) {
   return s
     .replace(/<[^>]+>/g, '')
@@ -152,6 +157,7 @@ async function main() {
       slug: file.replace(/\.html$/, ''),
       title: extractTitle(html),
       description: extractDescription(html),
+      category: extractCategory(html),
       created: gitCreated(file),
       updated: gitUpdated(file),
     };
@@ -201,7 +207,8 @@ async function main() {
       const metaLine = label
         ? `\n      <p class="meta"><time datetime="${escapeHtml(dateIso)}">${escapeHtml(label)}</time></p>`
         : '';
-      return `    <li>
+      const catAttr = t.category ? ` data-category="${escapeHtml(t.category)}"` : '';
+      return `    <li${catAttr}>
       <h2><a href="${escapeHtml(t.file)}">${escapeHtml(t.title || t.slug)}</a></h2>
       <p>${escapeHtml(t.description)}</p>${metaLine}
     </li>`;
