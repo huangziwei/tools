@@ -84,6 +84,27 @@
   }
   input[type="text"]::placeholder { color: var(--muted); opacity: 0.7; }
 
+  .mode-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .mode-btn {
+    flex: 1;
+    padding: 0.55rem 1rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .mode-btn:hover { border-color: var(--accent); background: var(--panel-active); }
+  .mode-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+
   .section { margin-top: 1.5rem; }
 
   .preview-area {
@@ -267,11 +288,39 @@
     <h1>QR Code Generator</h1>
     <!-- SOURCE_LINK_START --><a href="https://github.com/huangziwei/tools/blob/main/qr-code.html" target="_blank" rel="noopener" class="github-link" title="View source on GitHub"><svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a><!-- SOURCE_LINK_END -->
   </div>
-  <p class="lead">Generate QR codes with optional logo and decorative frames.</p>
+  <p class="lead">Generate QR codes for a link, text, or Wi-Fi network &mdash; with optional logo and decorative frames.</p>
 
-  <div>
+  <div class="mode-tabs" id="modeTabs">
+    <button type="button" class="mode-btn active" data-mode="text">URL / Text</button>
+    <button type="button" class="mode-btn" data-mode="wifi">Wi-Fi</button>
+  </div>
+
+  <div id="textFields">
     <label class="field-label" for="urlInput">URL or text</label>
     <input type="text" id="urlInput" placeholder="https://example.com">
+  </div>
+
+  <div id="wifiFields" style="display:none">
+    <label class="field-label" for="ssidInput">Network name (SSID)</label>
+    <input type="text" id="ssidInput" placeholder="MyNetwork" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div class="section" id="wifiPasswordRow">
+      <label class="field-label" for="wifiPassword">Password</label>
+      <input type="text" id="wifiPassword" placeholder="Network password" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="section">
+      <label class="field-label">Encryption</label>
+      <div class="frame-presets" id="encPresets">
+        <button type="button" class="frame-btn active" data-enc="WPA">WPA/WPA2</button>
+        <button type="button" class="frame-btn" data-enc="WEP">WEP</button>
+        <button type="button" class="frame-btn" data-enc="nopass">None</button>
+      </div>
+    </div>
+    <div class="section">
+      <label class="toggle-label">
+        <input type="checkbox" id="wifiHidden">
+        Hidden network
+      </label>
+    </div>
   </div>
 
   <div class="preview-area" id="previewArea">
@@ -325,7 +374,7 @@
 
   <footer>
     All data stays on your device.<br>
-    <!-- TOOL_META_START --><time datetime="2026-04-13T09:26:21+02:00">Updated at 2026/04/13 09:26</time><!-- TOOL_META_END -->
+    <!-- TOOL_META_START --><time datetime="2026-05-25T08:59:37+02:00">Updated at 2026/05/25 08:59</time><!-- TOOL_META_END -->
   </footer>
 </main>
 
@@ -350,6 +399,14 @@
   const framePresets = document.getElementById('framePresets');
   const frameLabelInput = document.getElementById('frameLabelInput');
   const downloadBtn = document.getElementById('downloadBtn');
+  const modeTabs = document.getElementById('modeTabs');
+  const textFields = document.getElementById('textFields');
+  const wifiFields = document.getElementById('wifiFields');
+  const ssidInput = document.getElementById('ssidInput');
+  const wifiPassword = document.getElementById('wifiPassword');
+  const wifiPasswordRow = document.getElementById('wifiPasswordRow');
+  const encPresets = document.getElementById('encPresets');
+  const wifiHidden = document.getElementById('wifiHidden');
 
   let logoImg = null;
   let dotColor = '#000000';
@@ -357,6 +414,8 @@
   let labelColor = '#000000';
   let palette = [];
   let currentFrame = 'card';
+  let currentMode = 'text';
+  let wifiEnc = 'WPA';
   let debounceTimer = null;
 
   // --- Color extraction ---
@@ -470,13 +529,38 @@
     ctx.fill();
   }
 
+  // --- Data sources ---
+
+  // Escape the characters reserved in the WIFI: payload (backslash, semicolon,
+  // comma, double-quote, colon) per the de-facto Zxing Wi-Fi QR format.
+  function escapeWifi(s) {
+    return s.replace(/([\\;,":])/g, '\\$1');
+  }
+
+  // WIFI:T:<WPA|WEP|nopass>;S:<ssid>;P:<password>;H:<true>;;
+  function buildWifiData() {
+    const ssid = ssidInput.value;
+    if (!ssid) return '';
+    let out = 'WIFI:T:' + wifiEnc + ';S:' + escapeWifi(ssid) + ';';
+    if (wifiEnc !== 'nopass') out += 'P:' + escapeWifi(wifiPassword.value) + ';';
+    if (wifiHidden.checked) out += 'H:true;';
+    return out + ';';
+  }
+
+  function getData() {
+    return currentMode === 'wifi' ? buildWifiData() : urlInput.value.trim();
+  }
+
   // --- Rendering ---
 
   function render() {
-    const data = urlInput.value.trim();
+    const data = getData();
     if (!data) {
       previewCanvas.style.display = 'none';
       logoHint.style.display = 'none';
+      placeholder.textContent = currentMode === 'wifi'
+        ? 'Enter a network name above to generate a QR code'
+        : 'Enter a URL above to generate a QR code';
       placeholder.style.display = '';
       downloadBtn.disabled = true;
       return;
@@ -786,6 +870,35 @@
 
   urlInput.addEventListener('input', scheduleRender);
 
+  // Mode tabs (URL/Text vs Wi-Fi)
+  modeTabs.addEventListener('click', function(e) {
+    var btn = e.target.closest('.mode-btn');
+    if (!btn) return;
+    currentMode = btn.dataset.mode;
+    modeTabs.querySelectorAll('.mode-btn').forEach(function(b) {
+      b.classList.toggle('active', b === btn);
+    });
+    textFields.style.display = currentMode === 'text' ? '' : 'none';
+    wifiFields.style.display = currentMode === 'wifi' ? '' : 'none';
+    render();
+  });
+
+  // Wi-Fi fields
+  ssidInput.addEventListener('input', scheduleRender);
+  wifiPassword.addEventListener('input', scheduleRender);
+  wifiHidden.addEventListener('change', render);
+  encPresets.addEventListener('click', function(e) {
+    var btn = e.target.closest('.frame-btn');
+    if (!btn) return;
+    encPresets.querySelectorAll('.frame-btn').forEach(function(b) {
+      b.classList.remove('active');
+    });
+    btn.classList.add('active');
+    wifiEnc = btn.dataset.enc;
+    wifiPasswordRow.style.display = wifiEnc === 'nopass' ? 'none' : '';
+    render();
+  });
+
   logoInput.addEventListener('change', function(e) {
     if (e.target.files[0]) setLogo(e.target.files[0]);
   });
@@ -876,7 +989,7 @@
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'qr-code.png';
+      a.download = currentMode === 'wifi' ? 'wifi-qr.png' : 'qr-code.png';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
