@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="category" content="Web & Text">
+<title>Text Diff</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111418;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --border-strong: #cbd5e1;
+    --panel: #f8fafc;
+    --panel-active: #eff6ff;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #f1f5f9;
+    --add-bg: #e6ffec;
+    --add-fg: #116329;
+    --add-mark: #aceebb;
+    --del-bg: #ffebe9;
+    --del-fg: #cf222e;
+    --del-mark: #ffc1bc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d10;
+      --fg: #e8eaed;
+      --muted: #9aa0a6;
+      --border: #262a30;
+      --border-strong: #3a3f47;
+      --panel: #14171c;
+      --panel-active: #17253f;
+      --accent: #60a5fa;
+      --accent-hover: #93c5fd;
+      --code-bg: #1a1f26;
+      --add-bg: rgba(63, 185, 80, 0.15);
+      --add-fg: #7ee787;
+      --add-mark: rgba(63, 185, 80, 0.4);
+      --del-bg: rgba(248, 81, 73, 0.15);
+      --del-fg: #ff9492;
+      --del-mark: rgba(248, 81, 73, 0.4);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1.5rem 2rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 900px; }
+
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.5rem; }
+  h1 { font-size: 1.75rem; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+  .github-link { color: var(--muted); display: flex; }
+  .github-link:hover { color: var(--fg); text-decoration: none; }
+  p.lead { color: var(--muted); margin: 0 0 2rem; font-size: 0.95rem; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  .io-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .io-col { display: flex; flex-direction: column; min-width: 0; }
+
+  label.field-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.4rem;
+    color: var(--fg);
+  }
+
+  textarea {
+    width: 100%;
+    padding: 0.7rem 0.85rem;
+    font-size: 0.88rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
+    transition: border-color 0.15s;
+    resize: vertical;
+    line-height: 1.5;
+    min-height: 200px;
+  }
+  textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  textarea::placeholder { color: var(--muted); opacity: 0.7; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 1rem;
+    margin-top: 1rem;
+  }
+  .control-group { display: flex; align-items: center; gap: 0.5rem; }
+  .control-label { font-size: 0.8rem; color: var(--muted); }
+  .spacer { flex: 1 1 auto; }
+
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .seg button {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    border: none;
+    background: transparent;
+    color: var(--fg);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .seg button + button { border-left: 1px solid var(--border-strong); }
+  .seg button:hover:not(.active) { background: var(--panel-active); }
+  .seg button.active { background: var(--accent); color: #fff; }
+
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--fg);
+    cursor: pointer;
+    user-select: none;
+  }
+  .check input { accent-color: var(--accent); cursor: pointer; margin: 0; }
+
+  .btn-secondary {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  .result {
+    margin-top: 1.75rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+  .diff-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .stats { font-size: 0.82rem; color: var(--muted); display: flex; gap: 0.85rem; align-items: center; }
+  .stat-add { color: var(--add-fg); font-weight: 600; }
+  .stat-del { color: var(--del-fg); font-weight: 600; }
+  .stat-note { font-style: italic; }
+
+  .diff-grid { display: grid; grid-template-columns: 1fr 1fr; }
+  .diff-grid .diff-pane + .diff-pane { border-left: 1px solid var(--border); }
+  .diff-pane-head {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    padding: 0.5rem 0.95rem 0;
+  }
+
+  .diff-body {
+    padding: 0.85rem 0.95rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    tab-size: 2;
+  }
+  .diff-body del, .diff-body ins {
+    text-decoration: none;
+    border-radius: 3px;
+    padding: 0.05em 0;
+  }
+  .diff-body ins {
+    background: var(--add-mark);
+    color: var(--add-fg);
+  }
+  .diff-body del {
+    background: var(--del-mark);
+    color: var(--del-fg);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+  /* Side-by-side panes tint whole-token spans rather than inline ins/del */
+  .diff-pane .d-add { background: var(--add-bg); color: var(--add-fg); border-radius: 3px; }
+  .diff-pane .d-del { background: var(--del-bg); color: var(--del-fg); border-radius: 3px; }
+
+  .empty-state {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  footer {
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  @media (max-width: 720px) {
+    .io-grid { grid-template-columns: 1fr; }
+    .diff-grid { grid-template-columns: 1fr; }
+    .diff-grid .diff-pane + .diff-pane { border-left: none; border-top: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="page-header">
+    <h1>Text Diff</h1>
+    <!-- SOURCE_LINK_START --><!-- SOURCE_LINK_END -->
+  </div>
+  <p class="lead">Paste two versions of a text to highlight word-level changes.</p>
+
+  <div class="io-grid">
+    <div class="io-col">
+      <label class="field-label" for="origInput">Original</label>
+      <textarea id="origInput" spellcheck="false" placeholder="Paste the original text here"></textarea>
+    </div>
+    <div class="io-col">
+      <label class="field-label" for="editInput">Edited</label>
+      <textarea id="editInput" spellcheck="false" placeholder="Paste the edited text here"></textarea>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <span class="control-label">Granularity</span>
+      <div class="seg" id="granSeg">
+        <button data-gran="word" class="active">Word</button>
+        <button data-gran="char">Character</button>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" id="ignoreCase"> Ignore case</label>
+    <label class="check"><input type="checkbox" id="ignoreWs"> Ignore whitespace</label>
+    <span class="spacer"></span>
+    <button class="btn-secondary" id="swapBtn" title="Swap the two sides">&#8646; Swap</button>
+    <button class="btn-secondary" id="exampleBtn">Example</button>
+    <button class="btn-secondary" id="clearBtn">Clear</button>
+  </div>
+
+  <div class="result" id="result">
+    <div class="diff-toolbar">
+      <div class="seg" id="viewSeg">
+        <button data-view="split" class="active">Side by side</button>
+        <button data-view="unified">Unified</button>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div id="diffOutput"></div>
+  </div>
+
+  <footer>
+    All data stays on your device.<br>
+    <!-- TOOL_META_START --><!-- TOOL_META_END -->
+  </footer>
+</main>
+
+<script>
+  var origInput = document.getElementById('origInput');
+  var editInput = document.getElementById('editInput');
+  var granSeg = document.getElementById('granSeg');
+  var viewSeg = document.getElementById('viewSeg');
+  var ignoreCase = document.getElementById('ignoreCase');
+  var ignoreWs = document.getElementById('ignoreWs');
+  var swapBtn = document.getElementById('swapBtn');
+  var exampleBtn = document.getElementById('exampleBtn');
+  var clearBtn = document.getElementById('clearBtn');
+  var diffOutput = document.getElementById('diffOutput');
+  var statsEl = document.getElementById('stats');
+
+  var granularity = 'word';
+  var view = 'split';
+
+  // --- tokenizers ---------------------------------------------------------
+
+  // Word level: Latin/number runs (keeping contractions) stay whole; each CJK
+  // char, whitespace run, and stray symbol is its own token so edits stay tight.
+  var WORD_RE = /[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]|[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*|\s+|[^\s]/gu;
+
+  function tokenizeWords(text) {
+    return text.match(WORD_RE) || [];
+  }
+
+  function tokenizeChars(text) {
+    return Array.from(text);
+  }
+
+  // --- Myers diff (insert/delete script over token arrays) ----------------
+
+  function myers(nA, nB, A, B) {
+    var N = nA.length, M = nB.length;
+    var ops = [];
+    if (N === 0 && M === 0) return ops;
+    if (N === 0) { for (var j = 0; j < M; j++) ops.push({ type: 'ins', token: B[j] }); return ops; }
+    if (M === 0) { for (var i = 0; i < N; i++) ops.push({ type: 'del', token: A[i] }); return ops; }
+
+    var MAX = N + M;
+    var offset = MAX;
+    var V = new Int32Array(2 * MAX + 1);
+    var trace = [];
+    var Dfound = -1;
+
+    for (var d = 0; d <= MAX; d++) {
+      var row = new Int32Array(d + 1); // index ki -> diagonal k = -d + 2*ki
+      for (var ki = 0; ki <= d; ki++) {
+        var k = -d + 2 * ki;
+        var x;
+        if (k === -d || (k !== d && V[offset + k - 1] < V[offset + k + 1])) {
+          x = V[offset + k + 1];     // move down -> insertion
+        } else {
+          x = V[offset + k - 1] + 1; // move right -> deletion
+        }
+        var y = x - k;
+        while (x < N && y < M && nA[x] === nB[y]) { x++; y++; }
+        V[offset + k] = x;
+        row[ki] = x;
+        if (x >= N && y >= M) { Dfound = d; break; }
+      }
+      trace.push(row);
+      if (Dfound !== -1) break;
+    }
+
+    var px = N, py = M;
+    var rev = [];
+    for (var d2 = Dfound; d2 > 0; d2--) {
+      var prevRow = trace[d2 - 1];
+      var k2 = px - py;
+      var prevK;
+      if (k2 === -d2) {
+        prevK = k2 + 1;
+      } else if (k2 === d2) {
+        prevK = k2 - 1;
+      } else {
+        var xm = prevRow[(k2 - 1 + (d2 - 1)) / 2];
+        var xp = prevRow[(k2 + 1 + (d2 - 1)) / 2];
+        prevK = (xm < xp) ? k2 + 1 : k2 - 1;
+      }
+      var prevX = prevRow[(prevK + (d2 - 1)) / 2];
+      var prevY = prevX - prevK;
+      var midX, midY, moveType, moveTok;
+      if (prevK === k2 + 1) {
+        midX = prevX; midY = prevY + 1;
+        moveType = 'ins'; moveTok = B[midY - 1];
+      } else {
+        midX = prevX + 1; midY = prevY;
+        moveType = 'del'; moveTok = A[midX - 1];
+      }
+      while (px > midX && py > midY) {
+        rev.push({ type: 'eq', token: A[px - 1] });
+        px--; py--;
+      }
+      rev.push({ type: moveType, token: moveTok });
+      px = prevX; py = prevY;
+    }
+    while (px > 0 && py > 0) {
+      rev.push({ type: 'eq', token: A[px - 1] });
+      px--; py--;
+    }
+    rev.reverse();
+    return rev;
+  }
+
+  // Trim shared prefix/suffix, then diff the differing middle. Falls back to a
+  // block-level replace if the middle is too large for an O(ND) word diff.
+  function diffTokens(A, B, opts) {
+    var norm = function (t) { return opts.ignoreCase ? t.toLowerCase() : t; };
+    var nA = A.map(norm), nB = B.map(norm);
+
+    var p = 0;
+    while (p < A.length && p < B.length && nA[p] === nB[p]) p++;
+    var sa = A.length, sb = B.length;
+    while (sa > p && sb > p && nA[sa - 1] === nB[sb - 1]) { sa--; sb--; }
+
+    var ops = [];
+    for (var i = 0; i < p; i++) ops.push({ type: 'eq', token: A[i] });
+
+    var midA = A.slice(p, sa), midB = B.slice(p, sb);
+    var coarse = false;
+    if (midA.length * midB.length > 6000000) {
+      coarse = true;
+      for (var di = 0; di < midA.length; di++) ops.push({ type: 'del', token: midA[di] });
+      for (var ii = 0; ii < midB.length; ii++) ops.push({ type: 'ins', token: midB[ii] });
+    } else {
+      var mid = myers(nA.slice(p, sa), nB.slice(p, sb), midA, midB);
+      for (var mi = 0; mi < mid.length; mi++) ops.push(mid[mi]);
+    }
+
+    for (var j = sb; j < B.length; j++) ops.push({ type: 'eq', token: B[j] });
+    ops.coarse = coarse;
+    return ops;
+  }
+
+  // --- whitespace normalization (for "ignore whitespace") -----------------
+
+  function normalizeText(text) {
+    text = text.replace(/\r\n?/g, '\n');
+    if (ignoreWs.checked) {
+      text = text.split('\n').map(function (line) {
+        return line.replace(/\s+/g, ' ').trim();
+      }).join('\n');
+    }
+    return text;
+  }
+
+  // --- run + measure ------------------------------------------------------
+
+  var CONTENT_RE = /[\p{L}\p{N}]/u;
+  function isCounted(token) {
+    return granularity === 'word' ? CONTENT_RE.test(token) : /\S/u.test(token);
+  }
+
+  // Merge adjacent ops of the same type into spans for rendering.
+  function coalesce(ops) {
+    var runs = [];
+    for (var i = 0; i < ops.length; i++) {
+      var last = runs[runs.length - 1];
+      if (last && last.type === ops[i].type) last.text += ops[i].token;
+      else runs.push({ type: ops[i].type, text: ops[i].token });
+    }
+    return runs;
+  }
+
+  function render() {
+    var a = normalizeText(origInput.value);
+    var b = normalizeText(editInput.value);
+
+    if (!a && !b) {
+      diffOutput.innerHTML = '<div class="empty-state">Paste text into both panels to see what changed.</div>';
+      statsEl.textContent = '';
+      return;
+    }
+
+    var tok = granularity === 'word' ? tokenizeWords : tokenizeChars;
+    var ops = diffTokens(tok(a), tok(b), { ignoreCase: ignoreCase.checked });
+
+    var added = 0, removed = 0;
+    for (var i = 0; i < ops.length; i++) {
+      if (!isCounted(ops[i].token)) continue;
+      if (ops[i].type === 'ins') added++;
+      else if (ops[i].type === 'del') removed++;
+    }
+
+    renderStats(added, removed, ops.coarse);
+
+    var runs = coalesce(ops);
+    if (view === 'split') renderSplit(runs);
+    else renderUnified(runs);
+  }
+
+  function renderStats(added, removed, coarse) {
+    statsEl.innerHTML = '';
+    var unit = granularity === 'word' ? 'word' : 'char';
+    function plural(n) { return n === 1 ? '' : 's'; }
+
+    if (added === 0 && removed === 0) {
+      var none = document.createElement('span');
+      none.textContent = 'No differences';
+      statsEl.appendChild(none);
+      return;
+    }
+    var addSpan = document.createElement('span');
+    addSpan.className = 'stat-add';
+    addSpan.textContent = '+' + added + ' ' + unit + plural(added);
+    var delSpan = document.createElement('span');
+    delSpan.className = 'stat-del';
+    delSpan.textContent = '−' + removed + ' ' + unit + plural(removed);
+    statsEl.appendChild(addSpan);
+    statsEl.appendChild(delSpan);
+    if (coarse) {
+      var note = document.createElement('span');
+      note.className = 'stat-note';
+      note.textContent = 'large input · block-level diff';
+      statsEl.appendChild(note);
+    }
+  }
+
+  function renderSplit(runs) {
+    var grid = document.createElement('div');
+    grid.className = 'diff-grid';
+
+    var left = paneFor('Original', runs, 'del');
+    var right = paneFor('Edited', runs, 'ins');
+    grid.appendChild(left);
+    grid.appendChild(right);
+
+    diffOutput.innerHTML = '';
+    diffOutput.appendChild(grid);
+  }
+
+  // keepChange is the change type this pane shows: left keeps 'del' (the
+  // original), right keeps 'ins' (the edit). The other type is dropped.
+  function paneFor(title, runs, keepChange) {
+    var pane = document.createElement('div');
+    pane.className = 'diff-pane';
+    var head = document.createElement('div');
+    head.className = 'diff-pane-head';
+    head.textContent = title;
+    var body = document.createElement('div');
+    body.className = 'diff-body';
+
+    for (var i = 0; i < runs.length; i++) {
+      var run = runs[i];
+      if (run.type === 'eq') {
+        body.appendChild(document.createTextNode(run.text));
+      } else if (run.type === keepChange) {
+        var span = document.createElement('span');
+        span.className = keepChange === 'ins' ? 'd-add' : 'd-del';
+        span.textContent = run.text;
+        body.appendChild(span);
+      }
+      // the other change type belongs only to the opposite pane
+    }
+    pane.appendChild(head);
+    pane.appendChild(body);
+    return pane;
+  }
+
+  function renderUnified(runs) {
+    var body = document.createElement('div');
+    body.className = 'diff-body';
+    for (var i = 0; i < runs.length; i++) {
+      var run = runs[i];
+      if (run.type === 'eq') {
+        body.appendChild(document.createTextNode(run.text));
+      } else {
+        var el = document.createElement(run.type === 'ins' ? 'ins' : 'del');
+        el.textContent = run.text;
+        body.appendChild(el);
+      }
+    }
+    diffOutput.innerHTML = '';
+    diffOutput.appendChild(body);
+  }
+
+  // --- wiring -------------------------------------------------------------
+
+  var debounceTimer = null;
+  function scheduleRender() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(render, 120);
+  }
+
+  origInput.addEventListener('input', scheduleRender);
+  editInput.addEventListener('input', scheduleRender);
+  ignoreCase.addEventListener('change', render);
+  ignoreWs.addEventListener('change', render);
+
+  granSeg.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    granularity = btn.dataset.gran;
+    setActive(granSeg, btn);
+    render();
+  });
+  viewSeg.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    view = btn.dataset.view;
+    setActive(viewSeg, btn);
+    render();
+  });
+
+  function setActive(seg, btn) {
+    var buttons = seg.querySelectorAll('button');
+    for (var i = 0; i < buttons.length; i++) buttons[i].classList.remove('active');
+    btn.classList.add('active');
+  }
+
+  swapBtn.addEventListener('click', function () {
+    var tmp = origInput.value;
+    origInput.value = editInput.value;
+    editInput.value = tmp;
+    render();
+  });
+
+  clearBtn.addEventListener('click', function () {
+    origInput.value = '';
+    editInput.value = '';
+    render();
+    origInput.focus();
+  });
+
+  exampleBtn.addEventListener('click', function () {
+    origInput.value = 'The quick brown fox jumps over the lazy dog. It was a calm, ordinary afternoon in the village.';
+    editInput.value = 'The quick red fox leaps over the sleeping dog. It was a calm, quiet afternoon in the small village.';
+    render();
+  });
+
+  render();
+</script>
+</body>
+</html>
