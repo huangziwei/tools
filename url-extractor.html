@@ -486,6 +486,51 @@
     }).filter(function(url) { return url && looksLikeUrl(url); });
   }
 
+  // Absolute http(s) URLs embedded in raw text (script/style/JSON/plain text).
+  // Stops at whitespace, quotes, brackets and backslashes so JSON/JS string
+  // delimiters bound the match cleanly.
+  function extractTextUrls(text) {
+    if (!text || text.indexOf('http') === -1) return [];
+    // Undo the two escapes most common in JSON embedded in <script> so query
+    // strings survive (e.g. "https:\/\/host\/a?x=1&y=2").
+    var normalized = text.replace(/\\\//g, '/').replace(/\\u0026/gi, '&');
+    var re = /https?:\/\/[^\s"'`<>(){}\[\]\\|^]+/gi;
+    var out = [];
+    var m;
+    while ((m = re.exec(normalized)) !== null) {
+      var url = m[0].replace(/[.,;:!?'"]+$/, ''); // drop trailing sentence punctuation
+      if (url.length > 8) out.push(url);
+    }
+    return out;
+  }
+
+  // Add URLs found in element text content, bucketed by source kind
+  // (script / style / text), merging into the same attr map the chips read.
+  function scanTextUrls(doc, attrMap) {
+    function addAll(bucket, urls) {
+      if (!urls.length) return;
+      if (!attrMap.has(bucket)) attrMap.set(bucket, new Set());
+      var set = attrMap.get(bucket);
+      urls.forEach(function(u) { set.add(u); });
+    }
+
+    ['script', 'style'].forEach(function(tag) {
+      var els = doc.getElementsByTagName(tag);
+      for (var i = 0; i < els.length; i++) {
+        addAll(tag, extractTextUrls(els[i].textContent));
+      }
+    });
+
+    // Remaining text nodes (visible/plain text outside script & style)
+    var walker = doc.createTreeWalker(doc.documentElement, NodeFilter.SHOW_TEXT, null);
+    var node;
+    while ((node = walker.nextNode())) {
+      var parent = node.parentNode ? node.parentNode.nodeName.toLowerCase() : '';
+      if (parent === 'script' || parent === 'style') continue;
+      addAll('text', extractTextUrls(node.nodeValue));
+    }
+  }
+
   // Scan parsed doc for all attributes containing URL-like values
   function scanForUrls(doc) {
     var attrMap = new Map(); // attrName -> Set of unique values
@@ -507,6 +552,9 @@
         }
       }
     }
+
+    // Also pull URLs out of <script>/<style>/text content, not just attributes
+    scanTextUrls(doc, attrMap);
 
     var results = [];
     attrMap.forEach(function(values, attr) {
