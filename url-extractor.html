@@ -491,9 +491,14 @@
   // delimiters bound the match cleanly.
   function extractTextUrls(text) {
     if (!text || text.indexOf('http') === -1) return [];
-    // Undo the two escapes most common in JSON embedded in <script> so query
-    // strings survive (e.g. "https:\/\/host\/a?x=1&y=2").
-    var normalized = text.replace(/\\\//g, '/').replace(/\\u0026/gi, '&');
+    // Undo JSON string escapes common in <script> payloads (backslash-slash
+    // and backslash-u-XXXX) so escaped slashes and query separators become
+    // real characters; otherwise escaped URLs never match the pattern below.
+    var normalized = text
+      .replace(/\\\//g, '/')
+      .replace(/\\u([0-9a-fA-F]{4})/g, function(_, h) {
+        return String.fromCharCode(parseInt(h, 16));
+      });
     var re = /https?:\/\/[^\s"'`<>(){}\[\]\\|^]+/gi;
     var out = [];
     var m;
