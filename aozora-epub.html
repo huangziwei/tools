@@ -259,9 +259,30 @@
     -webkit-text-emphasis: filled sesame;
     text-emphasis: filled sesame;
   }
+  .preview-inner em { font-style: normal; }
+  .preview-inner em.open-sesame { -webkit-text-emphasis: open sesame; text-emphasis: open sesame; }
+  .preview-inner em.circle { -webkit-text-emphasis: filled circle; text-emphasis: filled circle; }
+  .preview-inner em.open-circle { -webkit-text-emphasis: open circle; text-emphasis: open circle; }
+  .preview-inner em.triangle { -webkit-text-emphasis: filled triangle; text-emphasis: filled triangle; }
+  .preview-inner em.open-triangle { -webkit-text-emphasis: open triangle; text-emphasis: open triangle; }
+  .preview-inner em.double-circle { -webkit-text-emphasis: filled double-circle; text-emphasis: filled double-circle; }
+  .preview-inner em.batsu { -webkit-text-emphasis: "×"; text-emphasis: "×"; }
+  .preview-inner p.indent { margin-top: 1em; text-indent: 0; }
   .preview-inner .underline { text-decoration: underline; }
+  .preview-inner .underline-double { text-decoration: underline double; }
+  .preview-inner .underline-wavy { text-decoration: underline wavy; }
+  .preview-inner .underline-dashed { text-decoration: underline dashed; }
+  .preview-inner .underline-dotted { text-decoration: underline dotted; }
+  .preview-inner .strikethrough { text-decoration: line-through; }
+  .preview-inner .strikethrough-double { text-decoration: line-through double; }
   .preview-inner .gothic { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif; }
-  .preview-inner .yokogumi { writing-mode: horizontal-tb; }
+  .preview-inner .italic { font-style: italic; }
+  .preview-inner .warichu { font-size: 0.85em; }
+  .preview-inner .chitsuki { display: block; text-align: end; }
+  .preview-inner .keigakomi { border: 1px solid currentColor; padding: 0.2em; }
+  .preview-inner .keigakomi-dashed { border: 1px dashed currentColor; padding: 0.2em; }
+  .preview-inner .keigakomi-double { border: 3px double currentColor; padding: 0.2em; }
+  .preview-inner img { max-height: 100%; }
   .preview-inner .colophon { margin-top: 3em; font-size: 0.85em; }
   .preview-inner .colophon p { text-indent: 0; margin: 0.2em 0; }
   .preview-inner h1 { text-indent: 0; }
@@ -379,6 +400,7 @@
   var bookColophon = '';
   var images = [];      // [{name, data (Uint8Array), mime}]
   var customCover = null; // {data: Uint8Array, mime: string} or null for default SVG
+  var previewImageUrls = []; // object URLs standing in for ../images/ in the preview
 
   // --- Decoding ---
 
@@ -402,6 +424,150 @@
     } catch (e) {
       return decodeShiftJIS(buf);
     }
+  }
+
+  // --- Gaiji (外字) ---
+
+  // JIS X 0213:2004 面区点 → Unicode for every character outside Shift-JIS —
+  // exactly the characters an Aozora gaiji annotation can name. One string per
+  // plane-ku row, indexed by ten − 1; '〓' marks a code with no entry here.
+  // Codes that map to a sequence or an invisible character live in X0213_SEQ.
+  var X0213_ROWS = {
+    '1-2': '〓〓〓〓〓〓〓〓〓〓〓〓〓〓＇＂－～〳〴〵〻〼ヿゟ〓〓〓〓〓〓〓〓⊄⊅⊊⊋∉∅⌅⌆〓〓〓〓〓〓〓⊕⊖⊗∥∦⦅⦆〘〙〖〗〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓≢≃≅≈≶≷↔〓〓〓〓〓〓〓〓♮♫♬♩',
+    '1-3': '▷▶◁◀↗↘↖↙⇄⇨⇦⇧⇩⤴⤵〓〓〓〓〓〓〓〓〓〓⦿◉〽﹆﹅◦•〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓∓ℵℏ㏋ℓ℧〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓゠–⧺⧻',
+    '1-4': '〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓ゔゕゖ',
+    '1-6': '〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓♤♠♢♦♡♥♧♣〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓ς⓵⓶⓷⓸⓹⓺⓻⓼⓽⓾☖☗〠☎☀☁☂☃♨▱ㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹ〓ㇺㇻㇼㇽㇾㇿ',
+    '1-7': '〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓⎾⎿⏀⏁⏂⏃⏄⏅⏆⏇⏈⏉⏊⏋⏌〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓ヷヸヹヺ⋚⋛⅓⅔⅕✓⌘␣⏎',
+    '1-8': '〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚㉛㉜㉝㉞㉟㊱㊲㊳㊴㊵㊶㊷㊸㊹㊺㊻㊼㊽㊾㊿〓〓〓〓〓〓〓〓◐◑◒◓‼⁇⁈⁉ǍǎǐḾḿǸǹǑǒǔǖǘǚǜ',
+    '1-9': '€〓¡¤¦©ª«〓®¯²³·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿĀĪŪĒŌāīūēō',
+    '1-10': 'Ą˘ŁĽŚŠŞŤŹŽŻą˛łľśˇšşťź˝žżŔĂĹĆČĘĚĎŃŇŐŘŮŰŢŕăĺćčęěďđńňőřůűţ˙ĈĜĤĴŜŬĉĝĥĵŝŭɱʋɾʃʒɬɮɹʈɖɳɽʂʐɻɭɟɲʝʎɡŋɰʁħʕ',
+    '1-11': 'ʔɦʘǂɓɗʄɠƓœŒɨʉɘɵəɜɞɐɯʊɤʌɔɑɒʍɥʢʡɕʑɺɧɚ〓ǽὰά〓〓〓〓〓〓〓〓ὲέ〓ˈˌːˑ〓‿〓〓〓〓〓〓〓˥˦˧˨˩〓〓〓〓〓〓〓〓〓〓〓〓˞',
+    '1-12': '❶❷❸❹❺❻❼❽❾❿⓫⓬⓭⓮⓯⓰⓱⓲⓳⓴ⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹⅺⅻⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩ㋐㋑㋒㋓㋔㋕㋖㋗㋘㋙㋚㋛㋜㋝㋞㋟㋠㋡㋢㋣㋺㋩㋥㋭㋬〓〓〓〓〓〓〓〓〓⁑⁂',
+    '1-13': '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪ㍉㌔㌢㍍㌘㌧㌃㌶㍑㍗㌍㌦㌣㌫㍊㌻㎜㎝㎞㎎㎏㏄㎡Ⅻ〓〓〓〓〓〓〓㍻〝〟№㏍℡㊤㊥㊦㊧㊨㈱㈲㈹㍾㍽㍼〓〓〓∮〓〓〓〓∟⊿〓〓〓❖☞',
+    '1-14': '俱𠀋㐂丨丯丰亍仡份仿伃伋你佈佉佖佟佪佬佾侊侔侗侮俉俠倁倂倎倘倧倮偀倻偁傔僌僲僐僦僧儆儃儋儞儵兊免兕兗㒵冝凃凊凞凢凮刁㓛刓刕剉剗剡劓勈勉勌勐勖勛勤勰勻匀匇匜卑卡卣卽厓厝厲吒吧呍咜呫呴呿咈咖咡',
+    '1-15': '咩哆哿唎唫唵啐啞喁喆喎喝喭嗎嘆嘈嘎嘻噉噶噦器噯噱噲嚙嚞嚩嚬嚳囉囊圊𡈽圡圯圳圴坰坷坼垜﨏𡌛垸埇埈埏埤埭埵埶埿堉塚塡塤塀塼墉增墨墩𡑮壒壎壔壚壠壩夌虁奝奭妋妒妤姃姒姝娓娣婧婭婷婾媄媞媧嫄𡢽嬙嬥剝',
+    '1-47': '〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓〓𠮟孁孖孽宓寘寬尒尞尣尫㞍屢層屮𡚴屺岏岟岣岪岺峋峐峒峴𡸴㟢崍崧﨑嵆嵇嵓嵊嵭嶁嶠嶤嶧嶸巋吞',
+    '1-84': '〓〓〓〓〓〓噓巢帔帘幘幞庾廊廋廹开异弇弝弣弴弶弽彀彅彔彘彤彧彽徉徜徧徯徵德忉忞忡忩怍怔怘怳怵恇悔悝悞惋惔惕惝惸愜愫愰愷慨憍憎憼憹懲戢戾扃扖扚扯抅拄拖拼挊挘挹捃捥捼揥揭揵搐搔搢摹摑摠摭擎撾撿',
+    '1-85': '擄擊擐擷擻攢攩敏敧斝既昀昉昕昞昺昢昤昫昰昱昳曻晈晌𣇄晙晚晡晥晳晷晸暍暑暠暲暻曆曈㬢曛曨曺朓朗朳杦杇杈杻极枓枘枛枻柹柀柗柼栁桒栝栬栱桛桲桵梅梣梥梲棈棐棨棭棰棱棼椊楉𣗄椵楂楗楣楤楨榀﨔榥榭槏㮶',
+    '1-86': '㯃槢槩槪槵槶樏樕𣜿樻樾橅橐橖橛橫橳𣝣檉檔檝檞檥櫤櫧㰏欄欛欞欬欵歆歖歠步歧歷殂殩殭殺每毖毗毿氅氐氳汙汜沪汴汶沅沆沘沜泻泆泔泠泫泮𣳾洄洎洮洱洹洿浘浥海涂涇涉涔涪涬涿淄淖淚淛淝淼渚渴湄湜湞溫溱滁',
+    '1-87': '滇滎漐漚漢漪漯漳潑潙潞潡潢潾澈澌澍澔澠澧澶澼濇濊濹濰濵瀅瀆瀨灊灝灞灎灤灵炅炤炫炷烔烘烤焏焫焞焠焮焰煆煇煑煮煒煜煠煨凞熅熇熒燁熺燄燾爀爕牕牖㸿犍犛犾狀狻𤟱猧猨猪獐獦獼玕玟玠玢玦玫珉珏珖珙珣珩',
+    '1-88': '琇琊琚琛琢琦琨琪琫琬琮琯琰瑄瑆瑇瑋瑗瑢瑫瑭璆璇璉璘璜璟璣璐璦璨璩璵璿瓈瓉瓚瓿甁甗甯畯畹疒㽲痎痤瘀瘂瘈瘕瘖瘙瘞瘭瘵癃癋癤癥癭癯癱皁皛皝皞皦皪皶盅盌盎盔盦盱盼眊眙眴眶睆睍睎睜睟睢睺瞀瞔瞪矠砭𥒎',
+    '1-89': '硃硎硏硑硨确碑碰𥔎碭磤磲礀磷礜礮礱礴社祉祅祆祈祐祖祜祝神祥祹禍禎福禘禱禸秈秊𥝱秔秞秫秭稃穀稹穝穭突窅窠𥧄窳窻竎竫竽笒笭笻筇筎筠筭筯筲箞節篗篙簁簱簞簠簳簶䉤𥶡籙籭籹粏粔粠粼糕糙糝紇紈紓紝紣紱',
+    '1-90': '絁絈絓絜絺綃綋綠綦緂緌緖緣練縨縈縑縕繁繇繒繡纊纍罇署羑羗羿翎翛翟翬翮翺者耔耦耵耷耼胊胗胠胳脘腊腠腧腨腭膻臊臏臗臭䑓䑛艠艴𦫿芎芡芣芤芩芮芷芾芿苆苕苽苾茀茁荢茢茭茺荃荇荑荕荽莆莒莘莧莩莿菀菇菏',
+    '1-91': '菑菡菪萁萆萊著葈葟葰葳蒅蒞蒯蒴蒺蓀蓂𦹀蔲蔞蔣蔯蕙蕤﨟薭蕺薌薏薢薰藋藎藭蘒藿蘄蘅蘐𧃴蘘蘩蘸虗虛虜虢䖝虬虵蚘蚸蛺蛼蛽蜋蝱螇螈螬螭螵䗪蟖蟬蠆蠊蠐蠔蠟袘袪裊裎𧚄裵褜褐褘褙褚褧褰褲褹襀覔視觔觥觶訒訕',
+    '1-92': '訢訷詇詎詝詡詵詹誧諐諟諴諶諸謁謹譆譔譙譩讝豉豨賓賡賴賸賾贈贒贛趯跎跑跗踠踣踽蹰蹻𨉷軀䡄軺輞輭輶轔𨏍辦辵迤迨迮逈逭逸邈邕邗邙邛邢邳邾郄郅郇郗郝郞郯郴都鄔鄕鄖鄢鄣鄧鄯鄱鄴鄽酈酛醃醞醬醱醼釗釻釤',
+    '1-93': '釥釭釱鈇鈐鈸鈹鈺鈼鉀鉃鉏鉸銈鋂鋋鋌鋓鋠鋿錄錟錡錥鍈鍉鍊鍤鍥鍪鍰鎛鎣鎺鏆鏞鏟鐄鏽鐳鑊鑣鑫鑱鑲閎閟閦閩閬閶閽闋闐闓䦰闚闞陘隄隆隝隤隥雒雞難雩雯霳霻靍靎靏靚靮靳鞕鞮鞺韁韉韞韛韴響頊頞頫頰頻顒顓顖',
+    '1-94': '顗顙顚類顥顬颺飈飧饘馞騂騃騤騭騮騸驊驎驒骶髁髃髎髖髹鬂鬈鬠䰗鬭魞魹魦魲魵鮄鮊鮏鮞鮧鯁鯎鯥鯸鯽鰀鰣鱁鱏鱐鱓鱣鱥鱷鴝鴞鵃鵇鵒鵣鵰鵼鶊鶖鷀鶬鶼鷗𪆐鷧鸇鸕鹼麞麤麬麯麴麵黃黑鼐鼹齗龐龔龗龢姸屛幷瘦繫',
+    '2-1': '𠂉丂丏丒丩丫丮乀乇么𠂢乑㐆𠂤乚乩亝㐬㐮亹亻𠆢亼仃仈仐仫仚仱仵伀伖佤伷伾佔佘𠈓佷佸佺佽侂侅侒侚俦侲侾俅俋俏俒㑪俲倀倐倓倜倞倢㑨偂偆偎偓偗偣偦偪偰傣傈傒傓傕傖傜傪𠌫傱傺傻僄僇僳𠎁僎𠍱僔僙僡僩㒒',
+    '2-3': '儈𠏹儗儛𠑊兠𠔉关冃冋㒼冘冣冭㓇冼𠗖𠘨凳凴刂划刖𠝏剕剜剬剷劄劂𠠇劘𠠺劤劦劯劺劻勊㔟勑𠢹勷匊匋匤匵匾卂𠥼𠦝卧卬卺厤厴𠫓厷叀𠬝㕝㕞叕叚㕣叴叵呕吤吨㕮呃呢呦呬咊咍咕咠咦咭咮咷咺咿哃𠵅哬哯哱哳唀唁唉',
+    '2-4': '唼啁㖦啇啊㖨啠啡啤𠷡啽喂喈喑㗅嗒𠺕𠹭喿嗉嗌嗑嗝㗚嗢𠹤嗩嘨𠽟嘇嘐嘰嘷㗴嘽嘿噀噇噞噠噭㘅嚈嚌嚕嚚嚝嚨嚭嚲囅囍囟囨囶囷𡈁圕圣𡉕圩𡉻坅坆坌坍𡉴坨坯坳坴坵坻𡋤𡋗垬垚垝垞垨埗𡋽埌𡌶𡍄埞埦埰㙊埸埻埽堄堞',
+    '2-5': '堠堧堲堹𡏄塉塌塧墊墋墍墏墐墔墝墪墱𡑭壃壍壢壳壴夅夆夋复夔夤𡗗㚑夽㚙奆㚖𦰩奛奟𡙇奵奶奼妟妮妼姈姍姞姣姤姧姮𡜆𡝂㛏娌娍娗娧娭婕婥婺媋媜媟媠媢媱媳媵媺媿嫚嫜嫠嫥嫰嫮嫵嬀嬈嬗嬴嬭孌孒孨孯孼孿宁宄𡧃',
+    '2-8': '宖宬㝡寀㝢寎寖㝬㝫寱寽㝵尃尩尰𡱖屟屣屧屨屩屰𡴭𡵅屼𡵸𡵢岈岊㟁𡶡𡶜岠岢岦岧𡶒岭岵𡶷峉𡷠𡸳崆崐崫崝崠崤崦崱崹嵂㟨嵡嵪㟴嵰𡼞㟽嶈㠀嶒嶔嶗嶙嶰嶲嶴𡽶嶹巑巗巘巠𡿺巤巩㠯帀㠶帒帕㡀帟帮帾幉㡜幖㡡幫幬幭',
+    '2-12': '幮𢅻庥庪庬庹庿廆廒廙𢌞廽弈弎弜𢎭弞彇彣彲彾徏徢徤徸忄㣺忇忋忒忓忔忢忮忯忳忼㤗怗怢怤㤚恌恿悊悕您𢛳悰悱悾惈惙惛惮惲惵愐愒愓愙愞愺㥯慁慆慠慼𢡛憒憓憗憘憥憨憭𢢫懕懝懟懵𢦏戕戣戩扆扌扑扒扡扤扻扭扳',
+    '2-13': '抙抦拕𢪸拽挃挍挐𢭏𢭐挲挵挻挼捁捄捎𢭆捙𢰝𢮦捬掄掙𢰤掔掽揷揔揕揜揠揫揬揲搉搞搥搩搯摚摛摝摳摽撇撑撝撟擋擌擕擗𢷡擤擥擿攄㩮攏攔攖㩳攞攲敄敔敫敺斁斄斅斊斲斵斸斿旂旉旔㫖旲旹旼昄昈昡昪晅晑晎㫪𣇃晗',
+    '2-14': '晛晣𣇵𣆶晪晫晬晭晻暀暐暒暙㬎暭暱暵㬚暿㬜曬㫗朁朅朒𣍲朙𣏓𣏒杌杍杔杝𣏐𣏤𣏕杴杶𣏚枒𣏟荣栐枰枲柃柈柒柙柛柰柷𣑊𣑑𣑋栘栟栭𣑥栳栻栾桄桅桉桌桕桗㭷桫桮桺桼梂梐梖㭭梘梙梚梜梪梫梴梻棻𣓤𣕚﨓棃棅棌棏棖',
+    '2-15': '棙棤棥棬棷椃椇㮇㮈𣖔椻㮍楆楩楬楲楺楿榒㮤榖榘榦榰榷榺榼槀槑槖𣘹𣙇樰𣘸𣘺槣槮槯槳㯍槴槾樑樚樝𣜜樲樳樴樿橆橉橺橎橒橤𣜌橾檃檋㯰檑檟檡𣝤檫檽櫆櫔櫐櫜櫝𣟿𣟧櫬櫱櫲櫳櫽𣠤欋欏欐欑𣠽欗㰦欯歊歘歬歵歺殁',
+    '2-78': '殛殮𣪘殽殾毇毈毉毚毦毧毮毱氂氊氎氵氶氺𣱿氿汍汛汭沄沉㳃沔沕沗沭泂泐㳒泖泚泜泩泬泭𣴀洀洊洤洦洧汧洯洼浛浞浠浰涀涁涊涍涑涘𣵀渗𣷺𣷹𣷓涫涮涴淂洴淈淎淏淐淟淩淶渶渞渢渧㴑渲渼湈湉湋湌湏湑湓湔湗湣㴞',
+    '2-79': '溓溧溴溿滃滊滙漵滫滹滻漊漌漘漥漶漼𣽾潒潗潚潠潨澘潽澐澖澾澟澥澯㵤澵濈濉濚濞濩𤂖濼瀀瀇瀊瀣𤄃瀹瀺瀼灃灇灋㶚灔灥灩灬灮灶灾炁炆炕炗炻𤇆炟炱𤇾烬烊烑烓烜焃焄焆焇焈焌㷀焯焱煐煊煓煞㷔熖熀熛熠熢熮熯',
+    '2-80': '熳𤎼燋燓燙燜爇㸅爫爫爴爸爹丬牂牓牗牣𤘩牮牯牸牿犎𤚥犭犮犰犱狁㹠狌㹦㹨狳狺猇猒猘猙㺃猹猬猱猳猽獒㺔獫獬𤢖獮獯獱獷玁玅玊玔玘玜玞玥玨玵玷玹玼玿珅珋珡珧珹琓珺琁琤琱琹瑓瑀瑃瑍瑒瑝瑱璁璅璈𤩍璒璗璙',
+    '2-81': '璠璡璥璪璫璹璻璺瓖瓘瓞瓯瓫𤭖瓺𤭯甠甤甪㽗𤰖甽甾畀畈畎畐畒畬畲畱畺畽畾疁𤴔疌㽵疢㽷疰疷疿痀痆痏痓痝痟痠痧痬痮痱痹瘃瘘瘇瘏㾮𤸎瘓瘛瘜𤸷瘥瘨瘼瘳𤹪㿉癁𤺋癉癕㿗癮皕皜皡皠皧皨皯𥁊盉𥁕盨盬𥄢眗眚眭眵',
+    '2-82': '𥆩䀹𥇥𥇍睘睠睪𥈞睲睼睽𥉌䁘瞚瞟瞢瞤瞩矞矟矤矦矪矬䂓矰矴矻𥐮砅砆砉砍砙砡砬硇硤硪𥓙碊碔碤碝碞碟碻磈磌磎磕磠磡磦磹磺磻磾𥖧礐礛礰礥礻祊祘祛䄅祧祲禔禕禖禛禡禩禴离秂秇秌种秖䅈𥞩𥞴䅏稊稑稕稛稞䅣稭',
+    '2-83': '稸穇穌穖穙穜穟穠穧穪穵穸窂窊窐窣窬𥧔䆴窹窼窾䆿竌竑竧竨竴𥫤𥫣笇𥫱笽笧笪笮笯笱䇦䇳筿筁䇮筕筹筤筦筩筳𥮲䈇箐箑箛䈎箯箵箼篅篊𥱋𥱤篔篖篚篪篰簃簋簎簏簦籅籊籑籗籞籡籩籮籯籰𥸮𥹖𥹥粦𥹢粶粷粿𥻘糄𥻂糈',
+    '2-84': '糍𥻨糗𥼣糦糫𥽜糵紃紉䋆紒紞𥿠𥿔紽紾絀絇𦀌𥿻䋖絙絚絪絰䋝絿𦀗綆綈綌綗𦁠綝綧綪綶綷緀緗緙緦緱緹䌂𦃭縉縐縗縝縠縧縬繅繳繵繾纆纇䌫纑纘纚䍃缼缻缾罃罄罏㓁𦉰罒𦊆罡罣罤罭罽罾𦍌羐养𣴎羖羜羭𦐂翃翏翣翥翯',
+    '2-85': '翲耂耊耈耎耑耖耤耬耰聃聦聱聵聻肙肜肤肧肸𦙾胅胕胘胦𦚰脍胵胻䏮脵脖脞䏰脤脧脬𦜝脽䐈腩䐗膁䐜膄膅䐢膘膲臁臃臖臛𦣝臤𦣪臬𦥑臽臿𦥯舄𦧝舙舡舢𦨞舲舴舼艆艉艅𦩘艋䑶艏䑺艗𦪌艜艣𦪷艹艹艹䒑艽艿芃芊芓芧芨',
+    '2-86': '芲芴芺芼苢苨苷茇茈茌荔茛茝茰茼荄荗䒾荿䓔䒳莍莔莕莛莝菉菐菔菝菥菹萏萑萕𦱳萗萹葊葏葑葒葙葚葜𦳝葥葶葸葼蒁䔍蓜蒗蒦蒾䔈蓎蓏蓓𦹥蓧蓪蓯蓰蓱蓺蓽蔌蔛蔤蔥蔫蔴蕏蕯䔥䕃蔾蕑蕓蕞蕡蕢𦾔蕻蕽蕿薁薆薓薝薟𦿸',
+    '2-87': '𦿶𦿷薷薼藇藊藘藙藟藡藦藶蘀蘑蘞蘡蘤蘧𧄍蘹蘼𧄹虀蘒虓虖虯虷虺蚇蚉蚍蚑蚜蚝蚨﨡蚱蚳蛁蛃蛑蛕蛗蛣蛦䖸蜅蜇蜎蜐蜓蜙蜟蜡蜣蜱蜺蜾蝀蝃蝑蝘蝤蝥蝲蝼𧏛𧏚螧螉螋螓螠𧏾䗥螾𧐐蟁蟎蟵蟟𧑉蟣蟥蟦蟪蟫蟭蠁蠃蠋蠓蠨',
+    '2-88': '蠮蠲蠼䘏衊衘衟衤𧘕𧘔衩𧘱衯袠袼袽袾裀裒𧚓裑裓裛裰裱䙁褁𧜎褷𧜣襂襅襉𧝒䙥襢覀覉覐覟覰覷觖觘觫䚡觱觳觽觿䚯訑訔𧦅訡訵訾詅詍詘誮誐誷誾諗諼𧪄謊謅謍謜謟謭譃䜌譑譞譶譿讁讋讔讕讜讞谹𧮳谽𧮾𧯇豅豇豏豔',
+    '2-89': '豗豩豭豳𧲸貓貒貙䝤貛貤賖賕賙𧶠賰賱𧸐贉贎赬趄趕趦𧾷跆跈跙跬踌䟽跽踆𨂊踔踖踡踢踧𨂻䠖踶踹蹋蹔蹢蹬蹭蹯躘躞躮躳躵躶躻𨊂軑軔䡎軹𨋳輀輈輗輫轀轊轘𨐌辤辴辶辶𨑕迁迆﨤迊迍迓迕迠迱迵迻适逌逷𨕫遃遄遝𨗈',
+    '2-90': '𨗉邅邌邐阝邡䢵邰邶郃郈𨛗郜郟𨛺郶郲鄀郫郾郿鄄鄆鄘鄜鄞鄷鄹鄺酆酇酗酙酡酤酴酹醅醎醨醮醳醶釃釄釚𨥉𨥆釬釮鈁鈊鈖鈗𨥫鈳鉂鉇鉊鉎鉑鉖鉙鉠鉡鉥鉧鉨𨦇𨦈鉼鉽鉿銉銍銗銙銟銧銫𨦺𨦻銲銿鋀鋆鋎鋐鋗鋙鋥鋧錑𨨞',
+    '2-91': '𨨩鋷鋹鋻錂錍錕錝錞錧錩𨩱𨩃鍇鍑鍗鍚鍫鍱鍳鎡𨪙𨫍鎈鎋鎏鎞鏵𨫤𨫝鏱鏁鏇鏜鏢鏧鐉鐏鐖鐗鏻鐲鐴鐻鑅𨯁𨯯鑭鑯镸镹閆閌閍𨴐閫閴𨵱闈𨷻𨸟阬阳阴𨸶阼陁陡𨺉隂𨻫隚𨼲䧧隩隯隳隺隽䧺𨿸雘雚雝䨄霔霣䨩霶靁靇靕靗靛',
+    '2-92': '靪𩊠𩊱鞖鞚鞞鞢鞱鞲鞾韌韑韔韘韙韡韱頄頍頎頔頖䪼𩒐頣頲頳頥顇顦颫颭颰𩗏颷颸颻颼颿飂飇飋飠𩙿飡飣飥飪飰飱飳餈䬻𩛰餖餗𩜙餚餛餜𩝐餱餲餳餺餻餼饀饁饆饍饎饜饟饠馣馦馹馽馿駃駉駔駙駞𩣆駰駹駼騊騑騖騚騠',
+    '2-93': '騱騶驄驌驘䯂骯䯊骷䯒骹𩩲髆髐髒髕䯨髜髠髥髩鬃鬌鬐鬒鬖鬜鬫鬳鬽䰠魋魣魥魫魬魳魶魷鮦鮬鮱𩷛𩸽鮲鮸鮾鯇鯳鯘鯝鯧鯪鯫鯯鯮𩸕鯺𩺊鯷𩹉鰖鰘鰙鰚鰝鰢鰧鰩鰪𩻄鰱鰶鰷鱅鱜𩻩鱉鱊𩻛鱔鱘鱛鱝鱟鱩鱪鱫鱭鱮鱰鱲鱵鱺',
+    '2-94': '鳦鳲鴋鴂𩿎鴑鴗鴘𪀯䳄𪀚鴲䳑鵂鵊鵟鵢𪃹鵩鵫𪂂鵳鵶鵷鵾鶄鶍鶙鶡鶿鶵鶹鶽鷃鷇鷉鷖鷚鷟鷠鷣鷴䴇鸊鸂鸍鸙鸜鸝鹻𢈘麀麅麛麨𪎌麽𪐷黟黧黮黿鼂䵷鼃鼗鼙鼯鼷鼺鼽齁齅齆齓齕齘𪗱齝𪘂齩𪘚齭齰齵𪚲'
+  };
+  var X0213_SEQ = {
+    '1-4-87': 'か\u{309A}',
+    '1-4-88': 'き\u{309A}',
+    '1-4-89': 'く\u{309A}',
+    '1-4-90': 'け\u{309A}',
+    '1-4-91': 'こ\u{309A}',
+    '1-5-87': 'カ\u{309A}',
+    '1-5-88': 'キ\u{309A}',
+    '1-5-89': 'ク\u{309A}',
+    '1-5-90': 'ケ\u{309A}',
+    '1-5-91': 'コ\u{309A}',
+    '1-5-92': 'セ\u{309A}',
+    '1-5-93': 'ツ\u{309A}',
+    '1-5-94': 'ト\u{309A}',
+    '1-6-88': 'ㇷ\u{309A}',
+    '1-9-2': '\u{A0}',
+    '1-9-9': '\u{AD}',
+    '1-11-36': 'æ\u{300}',
+    '1-11-40': 'ɔ\u{300}',
+    '1-11-41': 'ɔ\u{301}',
+    '1-11-42': 'ʌ\u{300}',
+    '1-11-43': 'ʌ\u{301}',
+    '1-11-44': 'ə\u{300}',
+    '1-11-45': 'ə\u{301}',
+    '1-11-46': 'ɚ\u{300}',
+    '1-11-47': 'ɚ\u{301}',
+    '1-11-50': '\u{361}',
+    '1-11-55': '\u{306}',
+    '1-11-57': '\u{30B}',
+    '1-11-58': '\u{301}',
+    '1-11-59': '\u{304}',
+    '1-11-60': '\u{300}',
+    '1-11-61': '\u{30F}',
+    '1-11-62': '\u{30C}',
+    '1-11-63': '\u{302}',
+    '1-11-69': '˩˥',
+    '1-11-70': '˥˩',
+    '1-11-71': '\u{325}',
+    '1-11-72': '\u{32C}',
+    '1-11-73': '\u{339}',
+    '1-11-74': '\u{31C}',
+    '1-11-75': '\u{31F}',
+    '1-11-76': '\u{320}',
+    '1-11-77': '\u{308}',
+    '1-11-78': '\u{33D}',
+    '1-11-79': '\u{329}',
+    '1-11-80': '\u{32F}',
+    '1-11-82': '\u{324}',
+    '1-11-83': '\u{330}',
+    '1-11-84': '\u{33C}',
+    '1-11-85': '\u{334}',
+    '1-11-86': '\u{31D}',
+    '1-11-87': '\u{31E}',
+    '1-11-88': '\u{318}',
+    '1-11-89': '\u{319}',
+    '1-11-90': '\u{32A}',
+    '1-11-91': '\u{33A}',
+    '1-11-92': '\u{33B}',
+    '1-11-93': '\u{303}',
+    '1-11-94': '\u{31A}'
+  };
+  var x0213Rows = {};
+
+  // Resolve the body of a ※［＃…］ annotation to the character it names: an
+  // explicit U+xxxx, or a 面区点 code (bare `1-8-78` for the symbol rows, after
+  // a 水準 label for kanji). Returns null for a glyph described only in prose.
+  function resolveGaiji(body) {
+    var u = body.match(/U\+([0-9A-Fa-f]{4,6})/);
+    if (u) {
+      var cp = parseInt(u[1], 16);
+      if (cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF)) return String.fromCodePoint(cp);
+    }
+    var m = body.match(/([12])-(\d{1,2})-(\d{1,2})/);
+    if (!m) return null;
+    var ku = parseInt(m[2], 10), ten = parseInt(m[3], 10);
+    if (ku < 1 || ku > 94 || ten < 1 || ten > 94) return null;
+    var rowKey = m[1] + '-' + ku;
+    var seq = X0213_SEQ[rowKey + '-' + ten];
+    if (seq) return seq;
+    if (!X0213_ROWS[rowKey]) return null;
+    var row = x0213Rows[rowKey] || (x0213Rows[rowKey] = Array.from(X0213_ROWS[rowKey]));
+    var c = row[ten - 1];
+    return c && c !== '〓' ? c : null;
   }
 
   // --- Aozora TXT parser ---
@@ -451,132 +617,235 @@
     while (bodyLines.length && !bodyLines[0].trim()) bodyLines.shift();
     while (bodyLines.length && !bodyLines[bodyLines.length - 1].trim()) bodyLines.pop();
 
-    // Multi-line state — use CSS classes on <p> instead of wrapping <div>s
-    // to avoid unclosed tag issues (same rationale as indent → class approach)
-    var indentLevel = 0;
-    var blockStyles = []; // stack of active block CSS classes
-    var headingId = 0;
-    var tocEntries = []; // [{id, level, text}]
-    var html = '';
-
-    // Block style mapping: annotation keyword → CSS class
-    var blockStyleMap = {
-      '横組み': 'yokogumi', 'ゴシック体': 'gothic', '斜体': 'italic',
-      '罫囲み': 'keigakomi', '枠囲み': 'keigakomi',
-      '破線罫囲み': 'keigakomi-dashed', '破線枠囲み': 'keigakomi-dashed',
-      '二重罫囲み': 'keigakomi-double', '二重枠囲み': 'keigakomi-double'
+    var state = {
+      indent: null,      // open ［＃ここから…字下げ］ block: {first, wrap}
+      blockStyles: [],   // open ［＃ここから…］ styles, innermost last; null = no rendering
+      boxFirst: null,    // open 罫囲み box <p>: true before its first line, false after
+      headingId: 0,
+      toc: [],           // [{id, level, text}]
+      html: ''
     };
-
     for (var n = 0; n < bodyLines.length; n++) {
-      var raw = bodyLines[n];
+      processLine(bodyLines[n], state);
+    }
+    // A box left open by a missing 終わり must still close.
+    closeOpenBox(state);
 
-      // Block indent start/end
-      var indentStart = raw.match(/［＃ここから[０-９0-9]+字下げ[^］]*］/);
-      if (indentStart) {
-        indentLevel++;
-        raw = raw.replace(/［＃ここから[０-９0-9]+字下げ[^］]*］/, '');
-        if (!raw.trim()) continue;
-      }
-      if (/［＃ここで字下げ終わり］/.test(raw)) {
-        raw = raw.replace(/［＃ここで字下げ終わり］/, '');
-        if (raw.trim()) {
-          html += '<p class="indent">' + convertAozoraLine(raw) + '</p>\n';
-        }
-        indentLevel = 0;
-        continue;
-      }
+    return { title: title, author: author, body: state.html, toc: state.toc, colophon: colophon };
+  }
 
-      // Block-level style start: ［＃ここからXXX］
-      var blockStart = raw.match(/［＃ここから(横組み|ゴシック体|斜体|破線罫囲み|破線枠囲み|二重罫囲み|二重枠囲み|罫囲み|枠囲み)］/);
-      if (blockStart) {
-        blockStyles.push(blockStyleMap[blockStart[1]]);
-        raw = raw.replace(/［＃ここから(横組み|ゴシック体|斜体|破線罫囲み|破線枠囲み|二重罫囲み|二重枠囲み|罫囲み|枠囲み)］/, '');
-        if (!raw.trim()) continue;
-      }
-      // Block-level style end: ［＃ここでXXX終わり］
-      var blockEnd = raw.match(/［＃ここで(横組み|ゴシック体|斜体|[^］]*囲み)終わり］/);
-      if (blockEnd) {
-        blockStyles.pop();
-        raw = raw.replace(/［＃ここで[^］]*終わり］/, '');
-        if (!raw.trim()) continue;
-      }
+  // Class for a ［＃ここから…］ block style, or null when the marker names a
+  // print-layout fact that reflowable vertical text renders as ordinary text.
+  // 横組み is one of those: it records that the 底本 set the run horizontally,
+  // and vertical editions keep such runs in the column.
+  var BLOCK_STYLE_CLASS = {
+    'ゴシック体': 'gothic', '斜体': 'italic',
+    '罫囲み': 'keigakomi', '枠囲み': 'keigakomi',
+    '破線罫囲み': 'keigakomi-dashed', '破線枠囲み': 'keigakomi-dashed',
+    '二重罫囲み': 'keigakomi-double', '二重枠囲み': 'keigakomi-double'
+  };
 
-      // Page/section breaks: reset all block state
-      if (/［＃(改ページ|改丁|ページの左右中央)］/.test(raw)) {
-        indentLevel = 0;
-        blockStyles = [];
-        if (/^［＃(改ページ|改丁|ページの左右中央)］\s*$/.test(raw.trim())) continue;
-        raw = raw.replace(/［＃(改ページ|改丁|ページの左右中央)］/g, '');
-      }
+  // A 罫囲み/枠囲み box is ONE <p> whose lines are joined by <br/>: readers
+  // paginate between a container's block children but flow <br/> within a
+  // text block, so any other shape breaks the box apart.
+  function isBoxClass(cls) {
+    return !!cls && cls.indexOf('keigakomi') === 0;
+  }
 
-      // Reset block state before headings
-      if (/［＃[大中小]見出し］/.test(raw)) { indentLevel = 0; blockStyles = []; }
+  function closeOpenBox(state) {
+    if (state.boxFirst !== null) {
+      state.html += '</p>\n';
+      state.boxFirst = null;
+    }
+  }
 
-      // Headings: ［＃大見出し］text［＃大見出し終わり］
-      var headingMatch = raw.match(/［＃大見出し］(.+?)［＃大見出し終わり］/);
-      if (headingMatch) {
-        headingId++;
-        var hText = headingMatch[1].replace(/［＃[^］]*］/g, '');
-        var hPlain = hText.replace(/《[^》]*》/g, '').replace(/｜/g, '');
-        tocEntries.push({ id: 'h' + headingId, level: 2, text: hPlain });
-        html += '<h2 id="h' + headingId + '">' + convertAozoraLine(hText) + '</h2>\n';
-        continue;
-      }
-      headingMatch = raw.match(/［＃中見出し］(.+?)［＃中見出し終わり］/);
-      if (headingMatch) {
-        headingId++;
-        var hText = headingMatch[1].replace(/［＃「[^」]*」は底本では[^］]*］/g, '');
-        var hPlain = hText.replace(/《[^》]*》/g, '').replace(/｜/g, '');
-        tocEntries.push({ id: 'h' + headingId, level: 3, text: hPlain });
-        html += '<h3 id="h' + headingId + '">' + convertAozoraLine(hText) + '</h3>\n';
-        continue;
-      }
-      headingMatch = raw.match(/［＃小見出し］(.+?)［＃小見出し終わり］/);
-      if (headingMatch) {
-        headingId++;
-        var hPlain = headingMatch[1].replace(/《[^》]*》/g, '').replace(/｜/g, '');
-        tocEntries.push({ id: 'h' + headingId, level: 4, text: hPlain });
-        html += '<h4 id="h' + headingId + '">' + convertAozoraLine(headingMatch[1]) + '</h4>\n';
-        continue;
-      }
+  // class/style attributes for a <p> carrying a 字下げ indent. `.indent` in
+  // the stylesheet already means one character, so that case needs no inline
+  // metrics. `first` is the first line's depth, `wrap` the wrapped lines'.
+  function indentAttrs(indent, extraClasses) {
+    var out = ' class="' + ['indent'].concat(extraClasses).join(' ') + '"';
+    if (indent.first !== 1 || indent.wrap !== 1) {
+      out += ' style="margin-top:' + indent.wrap + 'em';
+      if (indent.first !== indent.wrap) out += ';text-indent:' + (indent.first - indent.wrap) + 'em';
+      out += '"';
+    }
+    return out;
+  }
 
-      // Indentation prefix: ［＃N字下げ］ (single line)
-      raw = raw.replace(/［＃[０-９0-9]+字下げ］/g, '');
+  function parseZenkakuInt(s) {
+    return parseInt(s.replace(/[０-９]/g, function(d) {
+      return String.fromCharCode(d.charCodeAt(0) - 0xFF10 + 48);
+    }), 10);
+  }
 
-      // Postfix heading form: TEXT［＃「TEXT」は<大|中|小>見出し］. Many
-      // Aozora works (e.g. 漱石『吾輩は猫である』, 寅彦『柿の種』) use this
-      // instead of the wrapped ［＃大見出し］...［＃大見出し終わり］ form.
-      // Without this, those works produce no TOC. The preceding text may
-      // contain ｜/《》 ruby markup; compare against the bracketed plain
-      // form after stripping markup, but render the raw form so
-      // convertAozoraLine can emit <ruby> in the heading.
-      var postfixHead = raw.match(/^(.*?)［＃「([^」]+)」は([大中小])見出し］\s*$/);
-      if (postfixHead) {
-        var phRaw = postfixHead[1].trim();
-        var phPlain = phRaw.replace(/《[^》]*》/g, '').replace(/｜/g, '');
-        if (phPlain === postfixHead[2]) {
-          headingId++;
-          var phLevel = postfixHead[3] === '大' ? 2 : postfixHead[3] === '中' ? 3 : 4;
-          tocEntries.push({ id: 'h' + headingId, level: phLevel, text: phPlain });
-          html += '<h' + phLevel + ' id="h' + headingId + '">' + convertAozoraLine(phRaw) + '</h' + phLevel + '>\n';
-          continue;
-        }
-      }
+  // ［＃ここからN字下げ］, optionally 、折り返してM字下げ, and the
+  // ［＃ここから改行天付き、折り返してM字下げ］ form whose first line is flush.
+  var INDENT_START_RE = /［＃ここから(?:([０-９0-9]+)字下げ|改行天付き)(?:、折り返して([０-９0-9]+)字下げ)?[^］]*］/;
+  var BLOCK_START_RE = /［＃ここから(横組み|ゴシック体|斜体|破線罫囲み|破線枠囲み|二重罫囲み|二重枠囲み|罫囲み|枠囲み)］/;
+  var BLOCK_END_RE = /［＃ここで(横組み|ゴシック体|斜体|[^］]*囲み)終わり］/;
+  var JIZUME_RE = /［＃ここから[０-９0-9]+字詰め］|［＃ここで字詰め終わり］/g;
+  var PAGE_BREAK_RE = /［＃(改ページ|改丁|ページの左右中央)］/g;
+  // A one-line indent: ［＃N字下げ］, or ［＃天からN字下げ］ measured from the
+  // top of the column (the same thing in reflowable text).
+  var INDENT_SINGLE_RE = /［＃(?:天から)?([０-９0-9]+)字下げ］/;
+  // Postfix heading: ［＃「TEXT」は<大|中|小>見出し］ makes the preceding TEXT a
+  // heading. The quoted capture is greedy, so a nested 「…」 still matches.
+  var POSTFIX_HEADING_RE = /［＃「(.+)」は([大中小])見出し］/;
+  var WRAPPED_HEADINGS = [
+    { re: /［＃大見出し］(.+?)［＃大見出し終わり］/, level: 2 },
+    { re: /［＃中見出し］(.+?)［＃中見出し終わり］/, level: 3 },
+    { re: /［＃小見出し］(.+?)［＃小見出し終わり］/, level: 4 }
+  ];
+  // Notes the input made about the 底本 rather than about setting. They address
+  // the reader of the source file, so they carry no markup and are removed.
+  var EDITORIAL_BASE_NOTE_RE = /［＃「[^」]*」は底本では[^］]*］/g;
+  var EDITORIAL_NOTE_RE = /［＃(?:ルビの)?「[^」]*」は底本では[^］]*］|［＃(?:「[^」]*」は)?ママ］/g;
 
-      // Empty line → break
-      if (!raw.trim()) {
-        html += '<p><br/></p>\n';
-        continue;
-      }
+  function processLine(rawIn, state) {
+    var pending = processLineInner(rawIn, state);
+    // ［＃ここで…終わり］ closes a range that includes the line it sits on, so
+    // the style is released only after that line has been written.
+    if (pending.box) closeOpenBox(state);
+    if (pending.blockStyle) state.blockStyles.pop();
+    if (pending.indent) state.indent = null;
+  }
 
-      var classes = [];
-      if (indentLevel > 0) classes.push('indent');
-      for (var bs = 0; bs < blockStyles.length; bs++) classes.push(blockStyles[bs]);
-      var pAttr = classes.length ? ' class="' + classes.join(' ') + '"' : '';
-      html += '<p' + pAttr + '>' + convertAozoraLine(raw) + '</p>\n';
+  function resetBlockState(state) {
+    state.indent = null;
+    closeOpenBox(state);
+    state.blockStyles = [];
+  }
+
+  function emitHeading(state, level, source) {
+    state.headingId++;
+    var id = 'h' + state.headingId;
+    var inner = convertAozoraLine(source);
+    state.toc.push({ id: id, level: level, text: headingLabel(inner) });
+    state.html += '<h' + level + ' id="' + id + '">' + inner + '</h' + level + '>\n';
+  }
+
+  // Plain-text TOC label for a converted heading: readings and markup dropped.
+  function headingLabel(xhtml) {
+    return xhtml.replace(/<rp>[^<]*<\/rp>|<rt>[^<]*<\/rt>/g, '').replace(/<[^>]*>/g, '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  }
+
+  function processLineInner(rawIn, state) {
+    var raw = rawIn;
+    var pending = { blockStyle: false, indent: false, box: false };
+
+    // Block indent start (consume marker; rest of line continues).
+    var indentStart = raw.match(INDENT_START_RE);
+    if (indentStart) {
+      // 改行天付き has no first-line depth: the first line starts flush.
+      var first = indentStart[1] ? parseZenkakuInt(indentStart[1]) : 0;
+      var wrap = indentStart[2] ? parseZenkakuInt(indentStart[2]) : first;
+      state.indent = { first: first, wrap: wrap };
+      raw = raw.replace(INDENT_START_RE, '');
+      if (!raw.trim()) return pending;
+    }
+    // Block indent end. Not a stack: 字下げ終わり closes whatever is open.
+    if (raw.indexOf('［＃ここで字下げ終わり］') !== -1) {
+      raw = raw.replace('［＃ここで字下げ終わり］', '');
+      pending.indent = true;
+      if (!raw.trim()) return pending;
     }
 
-    return { title: title, author: author, body: html, toc: tocEntries, colophon: colophon };
+    // 字詰め (characters per line) has no reflowable equivalent.
+    if (/［＃ここ(から[０-９0-9]+字詰め|で字詰め終わり)］/.test(raw)) {
+      raw = raw.replace(JIZUME_RE, '');
+      if (!raw.trim()) return pending;
+    }
+
+    // Block style start. The 罫囲み family opens a single box <p>; the other
+    // styles push a per-paragraph class.
+    var blockStart = raw.match(BLOCK_START_RE);
+    if (blockStart) {
+      var cls = BLOCK_STYLE_CLASS[blockStart[1]] || null;
+      if (isBoxClass(cls)) {
+        closeOpenBox(state);
+        state.html += '<p' + (state.indent ? indentAttrs(state.indent, [cls]) : ' class="' + cls + '"') + '>';
+        state.boxFirst = true;
+      } else {
+        // Every non-box marker takes a slot, rendered or not, so that its
+        // 終わり pops its own entry.
+        state.blockStyles.push(cls);
+      }
+      raw = raw.replace(BLOCK_START_RE, '');
+      if (!raw.trim()) return pending;
+    }
+    // Block style end. A …囲み name closes the box; anything else releases a
+    // per-paragraph style.
+    var blockEnd = raw.match(BLOCK_END_RE);
+    if (blockEnd) {
+      if (blockEnd[1].indexOf('囲み') !== -1) pending.box = true;
+      else pending.blockStyle = true;
+      raw = raw.replace(/［＃ここで[^］]*終わり］/, '');
+      if (!raw.trim()) return pending;
+    }
+
+    // Page/section breaks reset all block state.
+    if (/［＃(改ページ|改丁|ページの左右中央)］/.test(raw)) {
+      resetBlockState(state);
+      pending = { blockStyle: false, indent: false, box: false };
+      if (/^［＃(改ページ|改丁|ページの左右中央)］\s*$/.test(raw.trim())) return pending;
+      raw = raw.replace(PAGE_BREAK_RE, '');
+    }
+
+    // Headings reset block state.
+    if (/［＃[大中小]見出し］/.test(raw)) {
+      resetBlockState(state);
+      pending = { blockStyle: false, indent: false, box: false };
+    }
+    for (var w = 0; w < WRAPPED_HEADINGS.length; w++) {
+      var hm = raw.match(WRAPPED_HEADINGS[w].re);
+      if (hm) {
+        emitHeading(state, WRAPPED_HEADINGS[w].level, hm[1].replace(EDITORIAL_BASE_NOTE_RE, ''));
+        return pending;
+      }
+    }
+
+    // One-line indent ［＃N字下げ］. It indents only its own line, so it
+    // overrides — never adds to — an enclosing 字下げ block.
+    var lineIndent = state.indent;
+    var single = raw.match(INDENT_SINGLE_RE);
+    if (single) {
+      var depth = parseZenkakuInt(single[1]);
+      lineIndent = { first: depth, wrap: depth };
+    }
+    raw = raw.replace(new RegExp(INDENT_SINGLE_RE.source, 'g'), '');
+
+    // Postfix heading: TEXT［＃「TEXT」は<大|中|小>見出し］. The text before the
+    // marker may carry ｜/《》 ruby markup; it is compared without it, and
+    // rendered with it so the heading keeps its <ruby>.
+    var postfix = raw.match(POSTFIX_HEADING_RE);
+    if (postfix) {
+      var head = raw.substring(0, postfix.index).trim();
+      if (head.replace(/《[^》]*》/g, '').replace(/｜/g, '') === postfix[1]) {
+        emitHeading(state, postfix[2] === '大' ? 2 : postfix[2] === '中' ? 3 : 4, head);
+        return pending;
+      }
+    }
+
+    // Inside a box: append this line to the open box <p>.
+    if (state.boxFirst !== null) {
+      if (!state.boxFirst) state.html += '<br/>';
+      if (raw.trim()) state.html += convertAozoraLine(raw);
+      state.boxFirst = false;
+      return pending;
+    }
+
+    if (!raw.trim()) {
+      state.html += '<p><br/></p>\n';
+      return pending;
+    }
+
+    var blockClasses = state.blockStyles.filter(function(s) { return s; });
+    var pAttr = lineIndent ? indentAttrs(lineIndent, blockClasses)
+      : blockClasses.length ? ' class="' + blockClasses.join(' ') + '"' : '';
+    state.html += '<p' + pAttr + '>' + convertAozoraLine(raw) + '</p>\n';
+    return pending;
   }
 
   function escapeXml(s) {
@@ -584,159 +853,245 @@
             .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
   }
 
+  // --- Ruby ---
+
+  // The character class an unmarked ruby base may span: K 漢字 (with 々〆〇),
+  // H ひらがな, T カタカナ, L 欧字 in either width. O is anything else — ruby
+  // then attaches to that one character only, so punctuation never extends a
+  // base backwards over the sentence.
+  function rubyClass(c) {
+    var cp = c.codePointAt(0);
+    if (cp >= 0x3005 && cp <= 0x3007) return 'K';
+    if ((cp >= 0x3400 && cp <= 0x4DBF) || (cp >= 0x4E00 && cp <= 0x9FFF) ||
+        (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0x20000 && cp <= 0x2A6DF) ||
+        (cp >= 0x2A700 && cp <= 0x2EBEF) || (cp >= 0x2F800 && cp <= 0x2FA1F)) return 'K';
+    if (cp >= 0x3041 && cp <= 0x309F) return 'H';
+    if ((cp >= 0x30A1 && cp <= 0x30FF) || (cp >= 0x31F0 && cp <= 0x31FF) ||
+        (cp >= 0xFF66 && cp <= 0xFF9F)) return 'T';
+    if (/[A-Za-z0-9０-９Ａ-Ｚａ-ｚ]/.test(c)) return 'L';
+    return 'O';
+  }
+
+  // The character (one code point) ending at UTF-16 index `end` of `s`.
+  function charBefore(s, end) {
+    var lo = s.charCodeAt(end - 1);
+    if (end >= 2 && lo >= 0xDC00 && lo <= 0xDFFF) {
+      var hi = s.charCodeAt(end - 2);
+      if (hi >= 0xD800 && hi <= 0xDBFF) return s.substring(end - 2, end);
+    }
+    return s.charAt(end - 1);
+  }
+
+  // Index in `head` where the ruby base for a 《 at its end begins, or -1.
+  function rubyBaseStart(head) {
+    // An explicit ｜ anywhere in the available text wins.
+    var bar = head.lastIndexOf('｜');
+    if (bar !== -1) return bar;
+    if (!head) return -1;
+    var last = charBefore(head, head.length);
+    // An element ends here (<img …/>, </ruby>). Text-level < and > are
+    // escaped, so the nearest < is this tag's start.
+    if (last === '>') return head.lastIndexOf('<');
+    // 〔…〕 wraps accent-decomposed Western text and takes ruby as one unit.
+    if (last === '〕') return head.lastIndexOf('〔');
+    var cls = rubyClass(last);
+    if (cls === 'O') return head.length - last.length;
+    var start = head.length;
+    while (start > 0) {
+      var ch = charBefore(head, start);
+      if (rubyClass(ch) !== cls) break;
+      start -= ch.length;
+    }
+    return start;
+  }
+
+  // An image cannot carry ruby in every reader, so a reading on a glyph image
+  // is recorded in its alt text instead.
+  function foldReadingIntoAlt(base, reading) {
+    var a = base.indexOf(' alt="');
+    if (a === -1) return base;
+    a += 6;
+    var e = base.indexOf('"', a);
+    if (e === -1) return base;
+    var alt = base.substring(a, e);
+    if (alt.indexOf(reading) !== -1) return base;
+    return base.substring(0, a) + alt + '（' + reading + '）' + base.substring(e);
+  }
+
+  // Replace every 《reading》 with a <ruby> over the base that precedes it.
+  function applyRuby(s) {
+    var out = '';
+    var copied = 0;  // index in s up to which out has been written
+    var search = 0;
+    for (;;) {
+      var open = s.indexOf('《', search);
+      if (open === -1) break;
+      var close = s.indexOf('》', open);
+      if (close === -1) break;
+      var reading = s.substring(open + 1, close);
+      search = close + 1;
+      // An empty 《》 is the legend for the notation, not a reading.
+      if (!reading) continue;
+      // The base has to lie in text not already consumed by an earlier ruby.
+      var rel = rubyBaseStart(s.substring(copied, open));
+      if (rel === -1) continue;
+      var baseStart = copied + rel;
+      out += s.substring(copied, baseStart);
+      var base = s.substring(baseStart, open);
+      if (base.charAt(0) === '｜') base = base.substring(1);
+      if (base.indexOf('<') !== -1) {
+        out += foldReadingIntoAlt(base, reading);
+      } else {
+        out += '<ruby>' + base + '<rp>（</rp><rt>' + reading + '</rt><rp>）</rp></ruby>';
+      }
+      copied = search;
+    }
+    return copied === 0 ? s : out + s.substring(copied);
+  }
+
+  // --- Inline annotations ---
+
+  function pairedForm(name, open, close) {
+    return { re: new RegExp('［＃' + name + '］([^［]*)［＃' + name + '終わり］', 'g'), open: open, close: close };
+  }
+
+  // Longest names first. 横組み is deliberately absent: its markers fall to
+  // the catch-all and the run stays in the vertical flow.
+  var PAIRED_FORMS = [
+    pairedForm('白ゴマ傍点', '<em class="open-sesame">', '</em>'),
+    pairedForm('黒三角傍点', '<em class="triangle">', '</em>'),
+    pairedForm('白三角傍点', '<em class="open-triangle">', '</em>'),
+    pairedForm('二重丸傍点', '<em class="double-circle">', '</em>'),
+    pairedForm('蛇の目傍点', '<em class="double-circle">', '</em>'),
+    pairedForm('白丸傍点', '<em class="open-circle">', '</em>'),
+    pairedForm('丸傍点', '<em class="circle">', '</em>'),
+    pairedForm('傍点', '<em class="sesame">', '</em>'),
+    pairedForm('二重取消線', '<span class="strikethrough-double">', '</span>'),
+    pairedForm('取消線', '<span class="strikethrough">', '</span>'),
+    pairedForm('二重傍線', '<span class="underline-double">', '</span>'),
+    pairedForm('傍線', '<span class="underline">', '</span>'),
+    pairedForm('波線', '<span class="underline-wavy">', '</span>'),
+    pairedForm('破線', '<span class="underline-dashed">', '</span>'),
+    pairedForm('鎖線', '<span class="underline-dotted">', '</span>'),
+    pairedForm('太字', '<strong>', '</strong>'),
+    pairedForm('ゴシック体', '<span class="gothic">', '</span>'),
+    pairedForm('斜体', '<i>', '</i>'),
+    pairedForm('上付き小文字', '<sup>', '</sup>'),
+    pairedForm('下付き小文字', '<sub>', '</sub>'),
+    pairedForm('行右小書き', '<sup>', '</sup>'),
+    pairedForm('行左小書き', '<sub>', '</sub>'),
+    { re: /［＃(?:ばつ|×)傍点］([^［]*)［＃(?:ばつ|×)傍点終わり］/g, open: '<em class="batsu">', close: '</em>' },
+    { re: /［＃(?:罫囲み|枠囲み)］([^［]*)［＃(?:罫囲み|枠囲み)終わり］/g, open: '<span class="keigakomi">', close: '</span>' },
+    { re: /［＃破線(?:罫囲み|枠囲み)］([^［]*)［＃破線(?:罫囲み|枠囲み)終わり］/g, open: '<span class="keigakomi-dashed">', close: '</span>' },
+    { re: /［＃二重(?:罫囲み|枠囲み)］([^［]*)［＃二重(?:罫囲み|枠囲み)終わり］/g, open: '<span class="keigakomi-double">', close: '</span>' },
+    pairedForm('返り点', '<sup class="kaeriten">', '</sup>')
+  ];
+
+  // Postfix ［＃「text」に…］ / ［＃「text」は…］ → tag pair wrapping the
+  // occurrence of text immediately before the annotation.
+  var POSTFIX_MAP = {
+    'に傍点': ['em class="sesame"', 'em'],
+    'に傍線': ['span class="underline"', 'span'],
+    'に二重傍線': ['span class="underline-double"', 'span'],
+    'に波線': ['span class="underline-wavy"', 'span'],
+    'に破線': ['span class="underline-dashed"', 'span'],
+    'に鎖線': ['span class="underline-dotted"', 'span'],
+    'は太字': ['strong', 'strong'],
+    'はゴシック体': ['span class="gothic"', 'span'],
+    'は斜体': ['i', 'i'],
+    'は罫囲み': ['span class="keigakomi"', 'span'],
+    'は枠囲み': ['span class="keigakomi"', 'span'],
+    'は行右小書き': ['sup', 'sup'],
+    'は行左小書き': ['sub', 'sub']
+  };
+  var POSTFIX_RE = new RegExp('［＃「([^」]+)」(' + Object.keys(POSTFIX_MAP)
+    .sort(function(a, b) { return b.length - a.length; }).join('|') + ')］', 'g');
+
+  function applyPostfixAnnotations(s) {
+    var matches = [];
+    var pm;
+    POSTFIX_RE.lastIndex = 0;
+    while ((pm = POSTFIX_RE.exec(s)) !== null) {
+      matches.push({ idx: pm.index, len: pm[0].length, text: pm[1], key: pm[2] });
+    }
+    // Right-to-left, so splicing never shifts a position still to be used.
+    for (var i = matches.length - 1; i >= 0; i--) {
+      var m = matches[i];
+      var tags = POSTFIX_MAP[m.key];
+      s = s.substring(0, m.idx) + s.substring(m.idx + m.len);
+      var target = s.substring(0, m.idx).lastIndexOf(m.text);
+      if (target !== -1) {
+        s = s.substring(0, target) + '<' + tags[0] + '>' + m.text + '</' + tags[1] + '>' +
+            s.substring(target + m.text.length);
+      }
+    }
+    return s;
+  }
+
   function convertAozoraLine(line) {
+    var hasAnno = line.indexOf('［') !== -1;
     var s = escapeXml(line);
 
     // Images: ［＃description（filename、dimensions）入る］
-    s = s.replace(/［＃([^（］]*)（([^、]+)、[^）]*）入る］/g, function(_, alt, filename) {
-      referencedImages.push(filename);
-      return '<img src="../images/' + filename + '" alt="' + alt.trim() + '"/>';
-    });
+    if (hasAnno) {
+      s = s.replace(/［＃([^（］]*)（([^、]+)、[^）]*）入る］/g, function(_, alt, filename) {
+        referencedImages.push(filename);
+        return '<img src="../images/' + filename + '" alt="' + alt.trim() + '"/>';
+      });
+    }
 
-    // Ruby: ｜base《reading》
-    s = s.replace(/｜([^《]+?)《([^》]+)》/g, function(_, base, reading) {
-      return '<ruby>' + base + '<rp>（</rp><rt>' + reading + '</rt><rp>）</rp></ruby>';
-    });
-    // Ruby: kanji《reading》 (no ｜ marker)
-    s = s.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]+)《([^》]+)》/g, function(_, base, reading) {
-      return '<ruby>' + base + '<rp>（</rp><rt>' + reading + '</rt><rp>）</rp></ruby>';
-    });
+    // Gaiji resolve before ruby: the annotation sits between a character and
+    // its reading (顳※［＃「需＋頁」、第3水準1-94-6］《こめかみ》), so the base is
+    // only visible once ※［＃…］ has collapsed to 顬. A glyph described only in
+    // prose keeps the ※ placeholder.
+    if (line.indexOf('※') !== -1) {
+      s = s.replace(/※［＃([^］]*)］/g, function(_, body) {
+        return resolveGaiji(body) || '※';
+      });
+    }
 
-    // --- Block-form annotations (paired start/end) ---
+    if (s.indexOf('《') !== -1) s = applyRuby(s);
 
-    // Bouten variants: ［＃傍点］text［＃傍点終わり］
-    s = s.replace(/［＃傍点］([^［]*)［＃傍点終わり］/g, function(_, t) { return '<em class="sesame">' + t + '</em>'; });
-    s = s.replace(/［＃白ゴマ傍点］([^［]*)［＃白ゴマ傍点終わり］/g, function(_, t) { return '<em class="open-sesame">' + t + '</em>'; });
-    s = s.replace(/［＃丸傍点］([^［]*)［＃丸傍点終わり］/g, function(_, t) { return '<em class="circle">' + t + '</em>'; });
-    s = s.replace(/［＃白丸傍点］([^［]*)［＃白丸傍点終わり］/g, function(_, t) { return '<em class="open-circle">' + t + '</em>'; });
-    s = s.replace(/［＃黒三角傍点］([^［]*)［＃黒三角傍点終わり］/g, function(_, t) { return '<em class="triangle">' + t + '</em>'; });
-    s = s.replace(/［＃白三角傍点］([^［]*)［＃白三角傍点終わり］/g, function(_, t) { return '<em class="open-triangle">' + t + '</em>'; });
-    s = s.replace(/［＃二重丸傍点］([^［]*)［＃二重丸傍点終わり］/g, function(_, t) { return '<em class="double-circle">' + t + '</em>'; });
-    s = s.replace(/［＃蛇の目傍点］([^［]*)［＃蛇の目傍点終わり］/g, function(_, t) { return '<em class="double-circle">' + t + '</em>'; });
-    s = s.replace(/［＃(ばつ|×)傍点］([^［]*)［＃(ばつ|×)傍点終わり］/g, function(_, _2, t) { return '<em class="batsu">' + t + '</em>'; });
+    if (!hasAnno) return s;
 
-    // Underline variants: ［＃傍線］text［＃傍線終わり］
-    s = s.replace(/［＃傍線］([^［]*)［＃傍線終わり］/g, function(_, t) { return '<span class="underline">' + t + '</span>'; });
-    s = s.replace(/［＃二重傍線］([^［]*)［＃二重傍線終わり］/g, function(_, t) { return '<span class="underline-double">' + t + '</span>'; });
-    s = s.replace(/［＃波線］([^［]*)［＃波線終わり］/g, function(_, t) { return '<span class="underline-wavy">' + t + '</span>'; });
-    s = s.replace(/［＃破線］([^［]*)［＃破線終わり］/g, function(_, t) { return '<span class="underline-dashed">' + t + '</span>'; });
-    s = s.replace(/［＃鎖線］([^［]*)［＃鎖線終わり］/g, function(_, t) { return '<span class="underline-dotted">' + t + '</span>'; });
-    s = s.replace(/［＃取消線］([^［]*)［＃取消線終わり］/g, function(_, t) { return '<span class="strikethrough">' + t + '</span>'; });
-    s = s.replace(/［＃二重取消線］([^［]*)［＃二重取消線終わり］/g, function(_, t) { return '<span class="strikethrough-double">' + t + '</span>'; });
+    // Editorial notes come out before anything reads a range.
+    s = s.replace(EDITORIAL_NOTE_RE, '');
 
-    // Bold: ［＃太字］text［＃太字終わり］
-    s = s.replace(/［＃太字］([^［]*)［＃太字終わり］/g, function(_, text) {
-      return '<strong>' + text + '</strong>';
-    });
-
-    // Gothic: ［＃ゴシック体］text［＃ゴシック体終わり］
-    s = s.replace(/［＃ゴシック体］([^［]*)［＃ゴシック体終わり］/g, function(_, text) {
-      return '<span class="gothic">' + text + '</span>';
-    });
-
-    // Italic: ［＃斜体］text［＃斜体終わり］
-    s = s.replace(/［＃斜体］([^［]*)［＃斜体終わり］/g, function(_, text) {
-      return '<i>' + text + '</i>';
-    });
-
-    // Horizontal text (yokogumi) inline: ［＃横組み］text［＃横組み終わり］
-    s = s.replace(/［＃横組み］([^［]*)［＃横組み終わり］/g, function(_, text) {
-      return '<span class="yokogumi">' + text + '</span>';
-    });
-
-    // Borders: ［＃罫囲み］text［＃罫囲み終わり］
-    s = s.replace(/［＃(罫囲み|枠囲み)］([^［]*)［＃(罫囲み|枠囲み)終わり］/g, function(_, _2, t) { return '<span class="keigakomi">' + t + '</span>'; });
-    s = s.replace(/［＃破線(罫囲み|枠囲み)］([^［]*)［＃破線(罫囲み|枠囲み)終わり］/g, function(_, _2, t) { return '<span class="keigakomi-dashed">' + t + '</span>'; });
-    s = s.replace(/［＃二重(罫囲み|枠囲み)］([^［]*)［＃二重(罫囲み|枠囲み)終わり］/g, function(_, _2, t) { return '<span class="keigakomi-double">' + t + '</span>'; });
-
-    // Superscript / subscript
-    s = s.replace(/［＃上付き小文字］([^［]*)［＃上付き小文字終わり］/g, function(_, t) { return '<sup>' + t + '</sup>'; });
-    s = s.replace(/［＃下付き小文字］([^［]*)［＃下付き小文字終わり］/g, function(_, t) { return '<sub>' + t + '</sub>'; });
-    s = s.replace(/［＃行右小書き］([^［]*)［＃行右小書き終わり］/g, function(_, t) { return '<sup>' + t + '</sup>'; });
-    s = s.replace(/［＃行左小書き］([^［]*)［＃行左小書き終わり］/g, function(_, t) { return '<sub>' + t + '</sub>'; });
-
-    // 返り点 (kanbun reading marks) — render as small superscript
-    s = s.replace(/［＃(返り点)］([^［]*)［＃\1終わり］/g, function(_, _2, t) { return '<sup class="kaeriten">' + t + '</sup>'; });
+    for (var f = 0; f < PAIRED_FORMS.length; f++) {
+      var form = PAIRED_FORMS[f];
+      s = s.replace(form.re, function(_, t) { return form.open + t + form.close; });
+    }
 
     // Font size: ［＃N段階大きな文字］text［＃大きな文字終わり］
     s = s.replace(/［＃([０-９0-9]+)段階大きな文字］([^［]*)［＃大きな文字終わり］/g, function(_, n, text) {
-      var level = parseInt(n.replace(/[０-９]/g, function(c) { return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48); }));
-      var em = 1 + level * 0.2;
+      var em = Math.round((1 + parseZenkakuInt(n) * 0.2) * 10) / 10;
       return '<span style="font-size:' + em + 'em">' + text + '</span>';
     });
-    // ［＃N段階小さな文字］text［＃小さな文字終わり］
     s = s.replace(/［＃([０-９0-9]+)段階小さな文字］([^［]*)［＃小さな文字終わり］/g, function(_, n, text) {
-      var level = parseInt(n.replace(/[０-９]/g, function(c) { return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48); }));
-      var em = Math.max(0.6, 1 - level * 0.1);
+      var em = Math.max(0.6, Math.round((1 - parseZenkakuInt(n) * 0.1) * 10) / 10);
       return '<span style="font-size:' + em + 'em">' + text + '</span>';
     });
 
-    // --- Postfix annotations: ［＃「text」にXXX］ ---
-    // AozoraEpub3 approach: find annotation position, walk backward to find
-    // the immediately preceding occurrence of text (skipping HTML tags).
-    // We process right-to-left so positions stay valid after insertion.
-    var postfixMap = {
-      'に傍点': ['em class="sesame"', 'em'],
-      'に傍線': ['span class="underline"', 'span'],
-      'に二重傍線': ['span class="underline-double"', 'span'],
-      'に波線': ['span class="underline-wavy"', 'span'],
-      'に破線': ['span class="underline-dashed"', 'span'],
-      'に鎖線': ['span class="underline-dotted"', 'span'],
-      'は太字': ['strong', 'strong'],
-      'はゴシック体': ['span class="gothic"', 'span'],
-      'は斜体': ['i', 'i'],
-      'は罫囲み': ['span class="keigakomi"', 'span'],
-      'は枠囲み': ['span class="keigakomi"', 'span'],
-      'は行右小書き': ['sup', 'sup'],
-      'は行左小書き': ['sub', 'sub']
-    };
-    var postfixKeys = Object.keys(postfixMap).sort(function(a, b) { return b.length - a.length; });
-    var postfixRe = new RegExp('［＃「([^」]+)」(' + postfixKeys.map(function(k) {
-      return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }).join('|') + ')］', 'g');
+    if (s.indexOf('「') !== -1) s = applyPostfixAnnotations(s);
 
-    // Collect all matches with positions (before any modification)
-    var postfixMatches = [];
-    var pm;
-    while ((pm = postfixRe.exec(s)) !== null) {
-      postfixMatches.push({ idx: pm.index, len: pm[0].length, text: pm[1], key: pm[2] });
-    }
-    // Process right-to-left so splicing doesn't shift earlier positions
-    for (var pi = postfixMatches.length - 1; pi >= 0; pi--) {
-      var pf = postfixMatches[pi];
-      var tags = postfixMap[pf.key];
-      if (!tags) continue;
-      // Remove the annotation
-      s = s.substring(0, pf.idx) + s.substring(pf.idx + pf.len);
-      // Walk backward from annotation position to find the target text
-      // Search in the plain-text content immediately before the annotation
-      var searchArea = s.substring(0, pf.idx);
-      var targetIdx = searchArea.lastIndexOf(pf.text);
-      if (targetIdx !== -1) {
-        s = s.substring(0, targetIdx) + '<' + tags[0] + '>' + pf.text + '</' + tags[1] + '>' + s.substring(targetIdx + pf.text.length);
-      }
-    }
-
-    // --- Other inline annotations ---
-
-    // Inline notes: ［＃割り注］text［＃割り注終わり］
+    // 割り注 marks a two-line inline setting, not delimiters: the 底本's own
+    // parentheses are already in the text around the markers.
     s = s.replace(/［＃割り注］([^［]*)［＃割り注終わり］/g, function(_, text) {
-      return '<small>（' + text + '）</small>';
+      return '<span class="warichu">' + text + '</span>';
     });
 
-    // Gaiji: ※［＃description、code］→ keep ※ as placeholder
-    s = s.replace(/※［＃[^］]*］/g, '※');
+    s = s.replace(EDITORIAL_BASE_NOTE_RE, '');
+    // Heading refs already consumed at line level. Greedy, like
+    // POSTFIX_HEADING_RE, so a nested 「…」 is stripped here too.
+    s = s.replace(/［＃「.*」は[大中小]見出し］/g, '');
 
-    // Named special chars
-    s = s.replace(/［＃感嘆符疑問符、[^\]]*］/g, '\u2049');
-    s = s.replace(/［＃感嘆符二つ、[^\]]*］/g, '\u203C');
-    s = s.replace(/［＃濁点付き片仮名ワ、[^\]]*］/g, '\u30F7');
-    s = s.replace(/［＃アレフ、[^\]]*］/g, '\u05D0');
-
-    // Strip editorial notes: ［＃「…」は底本では…］
-    s = s.replace(/［＃「[^」]*」は底本では[^］]*］/g, '');
-    // Heading refs already consumed at line level
-    s = s.replace(/［＃「[^」]*」は[大中小]見出し］/g, '');
+    // 地付き / 地からN字上げ: the rest of the line sits at the column's foot.
+    s = s.replace(/［＃地から[０-９0-9]+字上げ］(.*)$/, function(_, text) {
+      return '<br/><span class="chitsuki">' + text + '</span>';
+    });
+    s = s.replace(/［＃地付き］(.*)$/, function(_, text) {
+      return '<br/><span class="chitsuki">' + text + '</span>';
+    });
 
     // Remove remaining ［＃...］
     s = s.replace(/［＃[^］]*］/g, '');
@@ -814,11 +1169,56 @@
 
   // --- EPUB generation ---
 
-  function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      var r = Math.random() * 16 | 0;
-      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
+  function sha1(bytes) {
+    var len = bytes.length;
+    var nBlocks = ((len + 8) >> 6) + 1;
+    var words = new Uint32Array(nBlocks * 16);
+    for (var i = 0; i < len; i++) words[i >> 2] |= bytes[i] << (24 - (i & 3) * 8);
+    words[len >> 2] |= 0x80 << (24 - (len & 3) * 8);
+    words[nBlocks * 16 - 1] = len * 8;
+    var h = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0];
+    var w = new Uint32Array(80);
+    for (var b = 0; b < nBlocks; b++) {
+      for (var t = 0; t < 16; t++) w[t] = words[b * 16 + t];
+      for (t = 16; t < 80; t++) {
+        var x = w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16];
+        w[t] = (x << 1) | (x >>> 31);
+      }
+      var A = h[0], B = h[1], C = h[2], D = h[3], E = h[4];
+      for (t = 0; t < 80; t++) {
+        var f, k;
+        if (t < 20) { f = (B & C) | (~B & D); k = 0x5A827999; }
+        else if (t < 40) { f = B ^ C ^ D; k = 0x6ED9EBA1; }
+        else if (t < 60) { f = (B & C) | (B & D) | (C & D); k = 0x8F1BBCDC; }
+        else { f = B ^ C ^ D; k = 0xCA62C1D6; }
+        var tmp = (((A << 5) | (A >>> 27)) + f + E + k + w[t]) >>> 0;
+        E = D; D = C; C = ((B << 30) | (B >>> 2)) >>> 0; B = A; A = tmp;
+      }
+      h[0] = (h[0] + A) >>> 0; h[1] = (h[1] + B) >>> 0; h[2] = (h[2] + C) >>> 0;
+      h[3] = (h[3] + D) >>> 0; h[4] = (h[4] + E) >>> 0;
+    }
+    var out = new Uint8Array(20);
+    for (var o = 0; o < 20; o++) out[o] = (h[o >> 2] >>> (24 - (o & 3) * 8)) & 0xFF;
+    return out;
+  }
+
+  // RFC 4122 version-5 UUID of `name` in the URL namespace, so the same book
+  // always gets the same identifier.
+  function uuidV5(name) {
+    var ns = [0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8];
+    var nameBytes = new TextEncoder().encode(name);
+    var input = new Uint8Array(16 + nameBytes.length);
+    input.set(ns);
+    input.set(nameBytes, 16);
+    var d = sha1(input);
+    d[6] = (d[6] & 0x0f) | 0x50;
+    d[8] = (d[8] & 0x3f) | 0x80;
+    var hex = '';
+    for (var i = 0; i < 16; i++) {
+      hex += (d[i] < 16 ? '0' : '') + d[i].toString(16);
+      if (i === 3 || i === 5 || i === 7 || i === 9) hex += '-';
+    }
+    return hex;
   }
 
   function buildCoverSvg(title, author) {
@@ -836,8 +1236,9 @@
     // Estimate text width: ~1em per CJK char, ~0.55em per latin char
     function estimateWidth(text, fontSize) {
       var w = 0;
-      for (var i = 0; i < text.length; i++) {
-        w += text.charCodeAt(i) > 0x7F ? fontSize : fontSize * 0.55;
+      var chars = Array.from(text);
+      for (var i = 0; i < chars.length; i++) {
+        w += chars[i].codePointAt(0) > 0x7F ? fontSize : fontSize * 0.55;
       }
       return w;
     }
@@ -873,10 +1274,11 @@
     }
 
     function splitLines(text, n, fs) {
-      var charsPerLine = Math.ceil(text.length / n);
+      var chars = Array.from(text);
+      var charsPerLine = Math.ceil(chars.length / n);
       var lines = [];
       for (var i = 0; i < n; i++) {
-        var seg = text.substring(i * charsPerLine, (i + 1) * charsPerLine);
+        var seg = chars.slice(i * charsPerLine, (i + 1) * charsPerLine).join('');
         if (seg) lines.push(seg);
       }
       var maxW = 0;
@@ -920,9 +1322,41 @@
     return svg;
   }
 
-  function buildEpub(title, author, bodyXhtml, images, toc, colophon) {
+  // Rasterize the generated cover to JPEG: many readers (Kindle among them)
+  // show no SVG cover image.
+  function renderCoverJpeg(title, author) {
+    return new Promise(function(resolve, reject) {
+      var url = URL.createObjectURL(new Blob([buildCoverSvg(title, author)], { type: 'image/svg+xml' }));
+      var img = new Image();
+      img.onload = function() {
+        var canvas = document.createElement('canvas');
+        canvas.width = 1050;
+        canvas.height = 1500;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        try {
+          canvas.toBlob(function(blob) {
+            if (!blob) { reject(new Error('cover render failed')); return; }
+            blob.arrayBuffer().then(function(buf) {
+              resolve({ data: new Uint8Array(buf), mime: 'image/jpeg' });
+            }, reject);
+          }, 'image/jpeg', 0.85);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = function() {
+        URL.revokeObjectURL(url);
+        reject(new Error('cover render failed'));
+      };
+      img.src = url;
+    });
+  }
+
+  // `cover` is {data, mime}; the SVG cover is the fallback when it is null.
+  function buildEpub(title, author, bodyXhtml, images, toc, colophon, cover) {
     var zip = new JSZip();
-    var uuid = generateUUID();
+    var uuid = uuidV5('aozora:' + title + ':' + author);
 
     // mimetype must be first, uncompressed
     zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
@@ -960,7 +1394,7 @@
       '  text-emphasis: filled sesame;\n' +
       '}\n' +
       'rt { font-size: 0.55em; }\n' +
-      'p.indent { margin-inline-start: 1em; text-indent: 0; }\n' +
+      'p.indent { margin-top: 1em; text-indent: 0; }\n' +
       'img { max-width: 100%; max-height: 100%; }\n' +
       '.underline { text-decoration: underline; }\n' +
       '.underline-double { text-decoration: underline double; }\n' +
@@ -978,21 +1412,22 @@
       'em.batsu { font-style: normal; -webkit-text-emphasis: "×"; text-emphasis: "×"; }\n' +
       '.gothic { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif; }\n' +
       '.italic { font-style: italic; }\n' +
-      '.yokogumi { writing-mode: horizontal-tb; -webkit-writing-mode: horizontal-tb; -epub-writing-mode: horizontal-tb; }\n' +
-      '.keigakomi { border: 1px solid currentColor; padding: 0.2em; }\n' +
-      '.keigakomi-dashed { border: 1px dashed currentColor; padding: 0.2em; }\n' +
-      '.keigakomi-double { border: 3px double currentColor; padding: 0.2em; }\n' +
+      '.warichu { font-size: 0.85em; }\n' +
+      '.chitsuki { display: block; text-align: end; }\n' +
+      '.keigakomi { border: 1px solid currentColor; padding: 0.2em; break-inside: avoid; }\n' +
+      '.keigakomi-dashed { border: 1px dashed currentColor; padding: 0.2em; break-inside: avoid; }\n' +
+      '.keigakomi-double { border: 3px double currentColor; padding: 0.2em; break-inside: avoid; }\n' +
       '.colophon { margin-top: 3em; font-size: 0.85em; }\n' +
       '.colophon p { text-indent: 0; margin: 0.2em 0; }\n';
     zip.file('OEBPS/style.css', css);
 
     // Cover
     var coverFileName, coverMime;
-    if (customCover) {
-      var ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[customCover.mime] || 'png';
+    if (cover) {
+      var ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[cover.mime] || 'png';
       coverFileName = 'cover.' + ext;
-      coverMime = customCover.mime;
-      zip.file('OEBPS/images/' + coverFileName, customCover.data);
+      coverMime = cover.mime;
+      zip.file('OEBPS/images/' + coverFileName, cover.data);
     } else {
       coverFileName = 'cover.svg';
       coverMime = 'image/svg+xml';
@@ -1010,29 +1445,36 @@
       '</html>';
     zip.file('OEBPS/text/cover.xhtml', coverXhtml);
 
-    // --- Split body into chapters at <h2> boundaries ---
+    // --- Split body into chapters at the shallowest heading level present ---
     var chapters = []; // [{file, title, body}]
-    var h2splits = bodyXhtml.split(/(?=<h2[\s>])/);
+    var splitLevel = 2;
+    if (toc.length) {
+      splitLevel = Math.min.apply(null, toc.map(function(e) { return e.level; }));
+    }
+    var splits = bodyXhtml.split(new RegExp('(?=<h' + splitLevel + '[\\s>])'));
 
-    // First chunk = title page (everything before first h2)
-    var titleBody = '<h1>' + escapeXml(title) + '</h1>\n<p>' + escapeXml(author) + '</p>\n' + h2splits[0];
+    // A body opening on a heading has no front matter: the title page is title
+    // and author only, and that heading begins ch1.
+    var firstIsHeading = new RegExp('^\\s*<h' + splitLevel + '[\\s>]').test(splits[0]);
+    var titleBody = '<h1>' + escapeXml(title) + '</h1>\n<p>' + escapeXml(author) + '</p>\n' +
+      (firstIsHeading ? '' : splits[0]);
     chapters.push({ file: 'title.xhtml', title: title, body: titleBody });
 
-    // Each h2 starts a new chapter
-    for (var si = 1; si < h2splits.length; si++) {
-      var chBody = h2splits[si];
-      // Extract chapter title from the h2 tag
-      var chTitleMatch = chBody.match(/<h2[^>]*>(.+?)<\/h2>/);
-      var chTitle = chTitleMatch ? chTitleMatch[1].replace(/<[^>]+>/g, '') : 'Chapter ' + si;
-      chapters.push({ file: 'ch' + si + '.xhtml', title: chTitle, body: chBody });
+    for (var si = firstIsHeading ? 0 : 1; si < splits.length; si++) {
+      var chBody = splits[si];
+      var chNum = chapters.length;
+      var chTitleMatch = chBody.match(new RegExp('<h' + splitLevel + '[^>]*>([\\s\\S]*?)</h' + splitLevel + '>'));
+      var chTitle = chTitleMatch ? headingLabel(chTitleMatch[1]) : 'Chapter ' + chNum;
+      chapters.push({ file: 'ch' + chNum + '.xhtml', title: chTitle, body: chBody });
     }
 
-    // Colophon as separate chapter
+    // Colophon as separate chapter. It is written in the same notation as the
+    // body (gaiji, ruby), so it goes through the same line conversion.
     if (colophon) {
       var colBody = '<div class="colophon" id="colophon">\n';
       var cLines = colophon.split('\n');
       for (var ci = 0; ci < cLines.length; ci++) {
-        colBody += '<p>' + escapeXml(cLines[ci]) + '</p>\n';
+        colBody += '<p>' + convertAozoraLine(cLines[ci]) + '</p>\n';
       }
       colBody += '</div>\n';
       chapters.push({ file: 'colophon.xhtml', title: '底本情報', body: colBody });
@@ -1153,6 +1595,13 @@
         '    <content src="' + tocHref(toc[t]) + '"/>\n' +
         '  </navPoint>\n';
     }
+    if (colophon) {
+      var cn = toc.length + 1;
+      ncxPoints += '  <navPoint id="np' + cn + '" playOrder="' + cn + '">\n' +
+        '    <navLabel><text>底本情報</text></navLabel>\n' +
+        '    <content src="text/colophon.xhtml"/>\n' +
+        '  </navPoint>\n';
+    }
 
     var ncx =
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -1163,12 +1612,10 @@
       '</ncx>';
     zip.file('OEBPS/toc.ncx', ncx);
 
-    // Parse source info from colophon for OPF metadata
-    var publisher = '';
+    // The EPUB's publisher is 青空文庫, the digital publisher; the print
+    // edition only contributes its date.
     var pubDate = '';
     if (colophon) {
-      var pubMatch = colophon.match(/底本[：:]「[^」]*」([^、\n]+)/);
-      if (pubMatch) publisher = pubMatch[1].trim();
       var dateMatch = colophon.match(/(\d{4})[（(].*?[）)]\s*年\s*(\d{1,2})\s*月/);
       if (dateMatch) pubDate = dateMatch[1] + '-' + dateMatch[2].padStart(2, '0');
     }
@@ -1183,11 +1630,12 @@
       '    <dc:title>' + escapeXml(title) + '</dc:title>\n' +
       '    <dc:creator>' + escapeXml(author) + '</dc:creator>\n' +
       '    <dc:language>ja</dc:language>\n' +
-      (publisher ? '    <dc:publisher>' + escapeXml(publisher) + '</dc:publisher>\n' : '') +
+      '    <dc:publisher>青空文庫</dc:publisher>\n' +
       (pubDate ? '    <dc:date>' + pubDate + '</dc:date>\n' : '') +
       '    <dc:source>https://www.aozora.gr.jp/</dc:source>\n' +
       '    <meta property="dcterms:modified">' + new Date().toISOString().replace(/\.\d+Z/, 'Z') + '</meta>\n' +
       '    <meta property="rendition:layout">reflowable</meta>\n' +
+      '    <meta name="primary-writing-mode" content="vertical-rl"/>\n' +
       '  </metadata>\n' +
       '  <manifest>\n' +
       '    <item id="cover" href="text/cover.xhtml" media-type="application/xhtml+xml"/>\n' +
@@ -1199,7 +1647,7 @@
       imageManifest +
       '  </manifest>\n' +
       '  <spine page-progression-direction="rtl" toc="ncx">\n' +
-      '    <itemref idref="cover" linear="no"/>\n' +
+      '    <itemref idref="cover"/>\n' +
       chapterSpine +
       '  </spine>\n' +
       '</package>';
@@ -1215,6 +1663,7 @@
     var reader = new FileReader();
     reader.onload = function(e) {
       var buf = e.target.result;
+      images = [];
       if (name.endsWith('.zip')) {
         processZip(buf, file.name);
       } else if (name.endsWith('.html') || name.endsWith('.htm')) {
@@ -1309,10 +1758,18 @@
     if (bookColophon) {
       previewHtml += '<div class="colophon">';
       bookColophon.split('\n').forEach(function(line) {
-        previewHtml += '<p>' + escapeXml(line) + '</p>';
+        previewHtml += '<p>' + convertAozoraLine(line) + '</p>';
       });
       previewHtml += '</div>';
     }
+    revokePreviewImages();
+    previewHtml = previewHtml.replace(/src="\.\.\/images\/([^"]*)"/g, function(m, name) {
+      var img = images.find(function(im) { return escapeXml(im.name) === name; });
+      if (!img) return m;
+      var url = URL.createObjectURL(new Blob([img.data], { type: img.mime }));
+      previewImageUrls.push(url);
+      return 'src="' + url + '"';
+    });
     previewBody.innerHTML = previewHtml;
     preview.classList.add('visible');
     // Scroll to start (right edge in vertical-rl)
@@ -1333,7 +1790,13 @@
     }
   }
 
+  function revokePreviewImages() {
+    previewImageUrls.forEach(function(url) { URL.revokeObjectURL(url); });
+    previewImageUrls = [];
+  }
+
   function clearAll() {
+    revokePreviewImages();
     bookTitle = '';
     bookAuthor = '';
     bodyXhtml = '';
@@ -1469,25 +1932,24 @@
     convertBtn.disabled = true;
     showStatus('Generating EPUB\u2026');
 
-    try {
-      var epub = buildEpub(title, author, bodyXhtml, images, bookToc, bookColophon);
-      epub.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' }).then(function(blob) {
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = (title + ' - ' + author).replace(/[\/\\:*?"<>|]/g, '_') + '.epub';
-        a.click();
-        URL.revokeObjectURL(a.href);
-        convertBtn.disabled = false;
-        statusEl.classList.remove('visible');
-        showToast('EPUB downloaded');
-      }).catch(function(err) {
-        convertBtn.disabled = false;
-        showStatus('EPUB generation failed: ' + err.message, true);
-      });
-    } catch (err) {
+    var coverReady = customCover ? Promise.resolve(customCover)
+      : renderCoverJpeg(title, author).catch(function() { return null; });
+    coverReady.then(function(cover) {
+      var epub = buildEpub(title, author, bodyXhtml, images, bookToc, bookColophon, cover);
+      return epub.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+    }).then(function(blob) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (title + ' - ' + author).replace(/[\/\\:*?"<>|]/g, '_') + '.epub';
+      a.click();
+      URL.revokeObjectURL(a.href);
       convertBtn.disabled = false;
-      showStatus('Error: ' + err.message, true);
-    }
+      statusEl.classList.remove('visible');
+      showToast('EPUB downloaded');
+    }).catch(function(err) {
+      convertBtn.disabled = false;
+      showStatus('EPUB generation failed: ' + err.message, true);
+    });
   });
 </script>
 </body>
