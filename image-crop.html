@@ -364,7 +364,8 @@
     cursor: pointer;
     transition: border-color 0.15s;
   }
-  .btn-secondary:hover { border-color: var(--accent); }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--accent); }
+  .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 
   footer {
     margin-top: 2.5rem;
@@ -427,7 +428,7 @@
     <div class="stage-wrap">
       <div class="stage" id="stage">
         <img id="sourcePreview" alt="Image to crop">
-        <div class="crop-rect" id="cropRect" data-handle="move" tabindex="0" aria-label="Crop area. Arrow keys move it.">
+        <div class="crop-rect" id="cropRect" data-handle="move" tabindex="0" aria-label="Crop area. Arrow keys move it, R rotates it.">
           <span class="crop-label" id="cropLabel"></span>
           <div class="handle h-nw" data-handle="nw"></div>
           <div class="handle h-ne" data-handle="ne"></div>
@@ -436,7 +437,7 @@
         </div>
       </div>
     </div>
-    <p class="stage-hint">Drag to move. Drag a corner to resize. Arrow keys nudge (Shift for bigger steps).</p>
+    <p class="stage-hint">Drag to move. Drag a corner to resize. Arrow keys nudge (Shift for bigger steps). R rotates the frame.</p>
 
     <div class="section">
       <span class="field-label">Output format</span>
@@ -468,6 +469,7 @@
     <div class="btn-row">
       <button class="btn-primary" id="downloadBtn">Download</button>
       <button class="btn-secondary" id="centerBtn">Center</button>
+      <button class="btn-secondary" id="rotateBtn" title="Turn the crop frame 90° (R)">Rotate frame</button>
       <button class="btn-secondary" id="resetBtn">Start over</button>
     </div>
   </div>
@@ -497,6 +499,7 @@
   const statusEl = document.getElementById('status');
   const downloadBtn = document.getElementById('downloadBtn');
   const centerBtn = document.getElementById('centerBtn');
+  const rotateBtn = document.getElementById('rotateBtn');
   const resetBtn = document.getElementById('resetBtn');
 
   const MIN_SIDE = 16;
@@ -507,8 +510,17 @@
   let sourceUrl = null;
   let exif = null;
   let srcW = 0, srcH = 0;
-  // Linear crop factor relative to the source; the crop is srcW/factor × srcH/factor.
+  // Bumped by every load and by Start over; a load that finishes after a
+  // newer one is dropped.
+  let loadSeq = 0;
+  // Frame turned 90° against the source, e.g. portrait on a landscape photo.
+  let rotated = false;
+  // Linear crop factor relative to the source; the crop is srcW/factor ×
+  // srcH/factor, or srcH/factor × srcW/factor with the frame rotated.
   let factor = DEFAULT_FACTOR;
+  // The factor last asked for. A rotated frame may need a larger one to fit,
+  // and returns to this one when turned back.
+  let wantedFactor = DEFAULT_FACTOR;
   // Crop rectangle in source pixels.
   let crop = { x: 0, y: 0, w: 0, h: 0 };
   let currentFormat = 'auto';
@@ -675,6 +687,7 @@
   // --- Loading ----------------------------------------------------------
 
   async function loadFile(file) {
+    const seq = ++loadSeq;
     if (!file || !file.type.startsWith('image/')) {
       setStatus('error', 'Please choose an image file.');
       return;
@@ -695,6 +708,15 @@
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
+      if (seq !== loadSeq) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      // An SVG without an intrinsic size can load as 0 × 0.
+      if (!img.naturalWidth || !img.naturalHeight) {
+        img.onerror();
+        return;
+      }
       sourceFile = file;
       sourceImg = img;
       exif = fileExif;
@@ -702,23 +724,27 @@
       sourceUrl = url;
       srcW = img.naturalWidth;
       srcH = img.naturalHeight;
+      rotated = false;
+      // Turned, the frame must shrink until its long side fits the source's
+      // short side. A square source has nothing to turn.
+      rotateBtn.disabled = srcW === srcH ||
+        Math.max(srcW, srcH) / Math.min(srcW, srcH) > maxFactor();
 
       const parts = [`<strong>${escapeHtml(file.name)}</strong>`];
       if (exif && exif.model) parts.push(escapeHtml(exif.model));
       parts.push(`${srcW}&times;${srcH}`, formatMP(srcW * srcH), formatBytes(file.size));
       sourceInfo.innerHTML = parts.join(' &middot; ');
 
-      for (const btn of presetBtns) {
-        btn.disabled = presetFactor(btn) <= 1;
-      }
-
+      updatePresets();
       sourcePreview.src = url;
       configSection.style.display = '';
-      setFactor(Math.max(1, factor), { center: true });
+      setFactor(wantedFactor, { center: true });
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      setStatus('error', 'Could not decode this image. Your browser may not support this format.');
+      if (seq === loadSeq) {
+        setStatus('error', 'Could not decode this image. Your browser may not support this format.');
+      }
     };
     img.src = url;
   }
@@ -730,16 +756,41 @@
     return Math.sqrt(srcW * srcH / parseFloat(btn.dataset.pixels));
   }
 
-  function maxFactor() {
-    return Math.min(srcW, srcH) / MIN_SIDE;
+  // The frame at factor 1: the source's size, turned 90° when rotated.
+  function frameSize() {
+    return rotated ? [srcH, srcW] : [srcW, srcH];
   }
 
-  // Sets the crop factor, resizing the crop around its centre (or around
-  // `anchor`, a corner point in source pixels, when resizing by a handle).
+  // Smallest factor at which the frame fits inside the source.
+  function minFactor() {
+    const [fw, fh] = frameSize();
+    return Math.max(fw / srcW, fh / srcH);
+  }
+
+  // Largest factor that keeps the crop at least MIN_SIDE pixels across. A
+  // source smaller than that can only be taken whole.
+  function maxFactor() {
+    return Math.max(1, Math.min(srcW, srcH) / MIN_SIDE);
+  }
+
+  // Presets are off when they wouldn't crop at all or the frame can't reach
+  // them in its current orientation.
+  function updatePresets() {
+    for (const btn of presetBtns) {
+      const k = presetFactor(btn);
+      btn.disabled = k <= 1 || k < minFactor() || k > maxFactor();
+    }
+  }
+
+  // Asks for crop factor k and applies it as far as the frame allows,
+  // resizing the crop around its centre (or around `anchor`, a corner point
+  // in source pixels, when resizing by a handle).
   function setFactor(k, { center = false, anchor = null, skip = null } = {}) {
-    factor = clamp(k, 1, maxFactor());
-    const w = Math.max(1, Math.round(srcW / factor));
-    const h = Math.max(1, Math.round(srcH / factor));
+    wantedFactor = k;
+    factor = clamp(k, minFactor(), maxFactor());
+    const [fw, fh] = frameSize();
+    const w = Math.max(1, Math.round(fw / factor));
+    const h = Math.max(1, Math.round(fh / factor));
     let x, y;
     if (center) {
       x = (srcW - w) / 2;
@@ -803,6 +854,15 @@
     render();
   }
 
+  // Turns the frame 90° about its centre. Against the source's orientation it
+  // may have to shrink to fit; turning it back restores the factor asked for.
+  function rotateFrame() {
+    if (rotateBtn.disabled) return;
+    rotated = !rotated;
+    updatePresets();
+    setFactor(wantedFactor);
+  }
+
   new ResizeObserver(render).observe(sourcePreview);
 
   // --- Drag / resize ----------------------------------------------------
@@ -822,7 +882,8 @@
     const startY = e.clientY;
     const start = { ...crop };
     const s = displayScale();
-    const aspect = srcW / srcH;
+    const [fw, fh] = frameSize();
+    const aspect = fw / fh;
 
     let anchor = null, sx = 0, sy = 0, maxW = 0;
     if (mode !== 'move') {
@@ -850,8 +911,8 @@
         return;
       }
       const dw = (sx * dx + sy * dy * aspect) / 2;
-      const w = clamp(start.w + dw, srcW / maxFactor(), maxW);
-      setFactor(srcW / w, { anchor });
+      const w = clamp(start.w + dw, fw / maxFactor(), maxW);
+      setFactor(fw / w, { anchor });
     }
 
     function onUp() {
@@ -867,6 +928,11 @@
   });
 
   cropRect.addEventListener('keydown', e => {
+    if (e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      if (!e.repeat) rotateFrame();
+      return;
+    }
     const step = (e.shiftKey ? 10 : 1) / displayScale();
     const moves = {
       ArrowLeft: [-step, 0], ArrowRight: [step, 0],
@@ -995,9 +1061,11 @@
   });
 
   downloadBtn.addEventListener('click', download);
-  centerBtn.addEventListener('click', () => setFactor(factor, { center: true }));
+  centerBtn.addEventListener('click', () => setFactor(wantedFactor, { center: true }));
+  rotateBtn.addEventListener('click', rotateFrame);
 
   resetBtn.addEventListener('click', () => {
+    loadSeq++;
     if (sourceUrl) URL.revokeObjectURL(sourceUrl);
     sourceUrl = null;
     sourceFile = null; sourceImg = null; exif = null;
