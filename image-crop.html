@@ -150,7 +150,7 @@
     transition: border-color 0.15s, background 0.15s;
   }
   .preset-btn small { font-weight: 400; color: var(--muted); margin-left: 0.3rem; }
-  .preset-btn:hover:not(:disabled), .format-btn:hover {
+  .preset-btn:hover:not(:disabled):not(.active), .format-btn:hover:not(:disabled):not(.active) {
     border-color: var(--accent);
     background: var(--panel-active);
   }
@@ -160,7 +160,7 @@
     color: #fff;
   }
   .preset-btn.active small { color: inherit; opacity: 0.85; }
-  .preset-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .preset-btn:disabled, .format-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .size-row {
     display: flex;
@@ -231,14 +231,23 @@
       0 0 0 2px var(--accent),
       0 0 0 9999px rgba(0,0,0,0.5);
   }
-  .crop-rect::before, .crop-rect::after {
-    content: "";
+  .guides {
     position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
-    border: 0 solid rgba(255,255,255,0.35);
   }
-  .crop-rect::before { top: 0; bottom: 0; left: 33.333%; width: 33.333%; border-left-width: 1px; border-right-width: 1px; }
-  .crop-rect::after { left: 0; right: 0; top: 33.333%; height: 33.333%; border-top-width: 1px; border-bottom-width: 1px; }
+  .guides path {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .guides .shade { stroke: rgba(0,0,0,0.25); stroke-width: 3; }
+  .guides .line { stroke: rgba(255,255,255,0.6); stroke-width: 1; }
+  .guides .shade.minor { stroke: rgba(0,0,0,0.12); }
+  .guides .line.minor { stroke: rgba(255,255,255,0.3); }
   .crop-label {
     position: absolute;
     top: 6px;
@@ -381,7 +390,7 @@
     <h1>Megapixel Cropper</h1>
     <!-- SOURCE_LINK_START --><a href="https://github.com/huangziwei/tools/blob/main/image-crop.html" target="_blank" rel="noopener" class="github-link" title="View source on GitHub"><svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a><!-- SOURCE_LINK_END -->
   </div>
-  <p class="lead">Crop a photo down to a target megapixel count, keeping its aspect ratio.</p>
+  <p class="lead">Crop a photo down to a target megapixel count, in its own aspect ratio or one of Fujifilm's.</p>
 
   <label class="drop-zone" id="dropZone" for="fileInput">
     <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -397,6 +406,21 @@
     <div class="section">
       <div class="source-info" id="sourceInfo"></div>
 
+      <span class="field-label">Aspect ratio</span>
+      <div class="format-row" id="aspectRow">
+        <button type="button" class="format-btn active" data-aspect="" title="Keep the photo's own aspect ratio">Original</button>
+        <button type="button" class="format-btn" data-aspect="1:1" title="Square, on X and GFX cameras">1:1</button>
+        <button type="button" class="format-btn" data-aspect="7:6" title="6×7 medium format, on GFX cameras">7:6</button>
+        <button type="button" class="format-btn" data-aspect="5:4" title="4×5 large format, on GFX cameras and 40 MP X cameras such as the X-T5 and X100VI">5:4</button>
+        <button type="button" class="format-btn" data-aspect="4:3" title="The GFX sensor's shape, also on 40 MP X cameras such as the X-T5 and X100VI. Rotate the frame for the GFX100RF's 3:4">4:3</button>
+        <button type="button" class="format-btn" data-aspect="3:2" title="The X-series sensor's shape, also on GFX cameras">3:2</button>
+        <button type="button" class="format-btn" data-aspect="16:9" title="Widescreen, on X and GFX cameras">16:9</button>
+        <button type="button" class="format-btn" data-aspect="65:24" title="XPan / TX-1 panorama, on GFX cameras">65:24</button>
+        <button type="button" class="format-btn" data-aspect="17:6" title="6×17 panorama of the G617, on the GFX100RF">17:6</button>
+      </div>
+    </div>
+
+    <div class="section">
       <span class="field-label">Target</span>
       <div class="preset-group">
         <span class="preset-group-label">Teleconverter</span>
@@ -428,7 +452,8 @@
     <div class="stage-wrap">
       <div class="stage" id="stage">
         <img id="sourcePreview" alt="Image to crop">
-        <div class="crop-rect" id="cropRect" data-handle="move" tabindex="0" aria-label="Crop area. Arrow keys move it, R rotates it.">
+        <div class="crop-rect" id="cropRect" data-handle="move" tabindex="0" aria-label="Crop area. Arrow keys move it, R rotates it, O changes the guide.">
+          <svg class="guides" id="guides" preserveAspectRatio="none" aria-hidden="true"></svg>
           <span class="crop-label" id="cropLabel"></span>
           <div class="handle h-nw" data-handle="nw"></div>
           <div class="handle h-ne" data-handle="ne"></div>
@@ -437,7 +462,21 @@
         </div>
       </div>
     </div>
-    <p class="stage-hint">Drag to move. Drag a corner to resize. Arrow keys nudge (Shift for bigger steps). R rotates the frame.</p>
+    <p class="stage-hint">Drag to move. Drag a corner to resize. Arrow keys nudge (Shift for bigger steps). R rotates the frame. O cycles the guides, Shift+O flips them.</p>
+
+    <div class="section">
+      <span class="field-label">Guides</span>
+      <div class="format-row" id="guideRow">
+        <button type="button" class="format-btn" data-guide="none">None</button>
+        <button type="button" class="format-btn active" data-guide="thirds" title="Lines a third of the way in from each side">Rule of thirds</button>
+        <button type="button" class="format-btn" data-guide="phi" title="Lines 0.382 of the way in from each side: the phi grid">Golden ratio</button>
+        <button type="button" class="format-btn" data-guide="spiral" title="Fibonacci spiral winding in towards the subject">Golden spiral</button>
+        <button type="button" class="format-btn" data-guide="triangles" title="A diagonal, met at right angles by lines from the other two corners">Golden triangles</button>
+        <button type="button" class="format-btn" data-guide="diagonals" title="Lines at 45° from each corner">Diagonals</button>
+        <button type="button" class="format-btn" data-guide="center" title="Lines through the middle, for symmetry">Center lines</button>
+        <button type="button" class="format-btn" id="guideTurnBtn" title="Turn the spiral or triangles to another corner (Shift+O)" disabled>Flip</button>
+      </div>
+    </div>
 
     <div class="section">
       <span class="field-label">Output format</span>
@@ -501,6 +540,12 @@
   const centerBtn = document.getElementById('centerBtn');
   const rotateBtn = document.getElementById('rotateBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const aspectRow = document.getElementById('aspectRow');
+  const aspectBtns = [...aspectRow.querySelectorAll('.format-btn')];
+  const guideRow = document.getElementById('guideRow');
+  const guideBtns = [...guideRow.querySelectorAll('[data-guide]')];
+  const guideTurnBtn = document.getElementById('guideTurnBtn');
+  const guidesEl = document.getElementById('guides');
 
   const MIN_SIDE = 16;
   const DEFAULT_FACTOR = Math.SQRT2;
@@ -513,10 +558,12 @@
   // Bumped by every load and by Start over; a load that finishes after a
   // newer one is dropped.
   let loadSeq = 0;
+  // Frame shape as [long side, short side], or null for the source's own.
+  let aspect = null;
   // Frame turned 90° against the source, e.g. portrait on a landscape photo.
   let rotated = false;
-  // Linear crop factor relative to the source; the crop is srcW/factor ×
-  // srcH/factor, or srcH/factor × srcW/factor with the frame rotated.
+  // Linear crop factor relative to the largest frame of the chosen shape;
+  // the crop is fw/factor × fh/factor for the frameSize() fw × fh.
   let factor = DEFAULT_FACTOR;
   // The factor last asked for. A rotated frame may need a larger one to fit,
   // and returns to this one when turned back.
@@ -524,6 +571,9 @@
   // Crop rectangle in source pixels.
   let crop = { x: 0, y: 0, w: 0, h: 0 };
   let currentFormat = 'auto';
+  let guide = 'thirds';
+  // Times the guide has been flipped; see GUIDE_TURNS.
+  let guideTurn = 0;
 
   function formatBytes(n) {
     if (n < 1000) return n + ' B';
@@ -725,17 +775,13 @@
       srcW = img.naturalWidth;
       srcH = img.naturalHeight;
       rotated = false;
-      // Turned, the frame must shrink until its long side fits the source's
-      // short side. A square source has nothing to turn.
-      rotateBtn.disabled = srcW === srcH ||
-        Math.max(srcW, srcH) / Math.min(srcW, srcH) > maxFactor();
+      updateFrameControls();
 
       const parts = [`<strong>${escapeHtml(file.name)}</strong>`];
       if (exif && exif.model) parts.push(escapeHtml(exif.model));
       parts.push(`${srcW}&times;${srcH}`, formatMP(srcW * srcH), formatBytes(file.size));
       sourceInfo.innerHTML = parts.join(' &middot; ');
 
-      updatePresets();
       sourcePreview.src = url;
       configSection.style.display = '';
       setFactor(wantedFactor, { center: true });
@@ -751,14 +797,27 @@
 
   // --- Crop state -------------------------------------------------------
 
+  // Teleconverter presets are factors. Sensor presets are pixel counts for
+  // the source's whole frame, so another aspect ratio trims them the way the
+  // camera does: from a 3:2 photo, 26 MP at 16:9 is about the X-T4's
+  // 6240 × 3512.
   function presetFactor(btn) {
     if (btn.dataset.factor) return parseFloat(btn.dataset.factor);
     return Math.sqrt(srcW * srcH / parseFloat(btn.dataset.pixels));
   }
 
-  // The frame at factor 1: the source's size, turned 90° when rotated.
+  // The largest frame of the chosen shape that fits the source, on its side
+  // or upright like the source. Factor 1 is this frame.
+  function baseFrame() {
+    if (!aspect) return [srcW, srcH];
+    const [a, b] = srcH > srcW ? [aspect[1], aspect[0]] : aspect;
+    return srcW * b >= srcH * a ? [srcH * a / b, srcH] : [srcW, srcW * b / a];
+  }
+
+  // The frame at factor 1, turned 90° when rotated.
   function frameSize() {
-    return rotated ? [srcH, srcW] : [srcW, srcH];
+    const [w, h] = baseFrame();
+    return rotated ? [h, w] : [w, h];
   }
 
   // Smallest factor at which the frame fits inside the source.
@@ -768,18 +827,47 @@
   }
 
   // Largest factor that keeps the crop at least MIN_SIDE pixels across. A
-  // source smaller than that can only be taken whole.
+  // frame smaller than that can only be taken whole.
   function maxFactor() {
-    return Math.max(1, Math.min(srcW, srcH) / MIN_SIDE);
+    const [w, h] = baseFrame();
+    return Math.max(1, Math.min(w, h) / MIN_SIDE);
   }
 
-  // Presets are off when they wouldn't crop at all or the frame can't reach
-  // them in its current orientation.
+  // Turned, the frame must shrink until its long side fits the source's
+  // short side. A square frame has nothing to turn.
+  function canRotate() {
+    const [w, h] = baseFrame();
+    return w !== h && Math.max(h / srcW, w / srcH) <= maxFactor();
+  }
+
+  // Re-checks what the frame can do after the source or its shape changes.
+  // A square frame keeps the orientation, for the next shape picked.
+  function updateFrameControls() {
+    const [w, h] = baseFrame();
+    const turnable = canRotate();
+    if (!turnable && w !== h) rotated = false;
+    rotateBtn.disabled = !turnable;
+    updatePresets();
+  }
+
+  // Presets are off when the frame can't reach them in its current
+  // orientation, or when they would leave the photo whole.
   function updatePresets() {
+    const [fw, fh] = frameSize();
+    const whole = fw === srcW && fh === srcH;
     for (const btn of presetBtns) {
       const k = presetFactor(btn);
-      btn.disabled = k <= 1 || k < minFactor() || k > maxFactor();
+      btn.disabled = k < minFactor() || k > maxFactor() || (whole && k <= 1);
     }
+  }
+
+  // The chosen aspect ratio the way the frame stands, e.g. "9:16" upright;
+  // empty when keeping the source's own.
+  function ratioLabel(sep) {
+    if (!aspect) return '';
+    const [fw, fh] = frameSize();
+    const [a, b] = aspect;
+    return fw >= fh ? a + sep + b : b + sep + a;
   }
 
   // Asks for crop factor k and applies it as far as the frame allows,
@@ -820,9 +908,10 @@
     }
 
     const pct = pixels / (srcW * srcH) * 100;
+    const ratio = ratioLabel(':');
     const lines = [
-      `<strong>${crop.w}&times;${crop.h}</strong> &middot; ${formatMP(pixels)} &middot; ` +
-      `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}% of the original pixels`,
+      `<strong>${crop.w}&times;${crop.h}</strong>${ratio ? ` &middot; ${ratio}` : ''} &middot; ` +
+      `${formatMP(pixels)} &middot; ${pct < 10 ? pct.toFixed(1) : Math.round(pct)}% of the original pixels`,
     ];
     if (exif && exif.focal) {
       let line = `Focal length ${formatMM(exif.focal)} &rarr; <strong>${formatMM(exif.focal * factor)}</strong>`;
@@ -846,6 +935,7 @@
     cropRect.style.top = crop.y * s + 'px';
     cropRect.style.width = crop.w * s + 'px';
     cropRect.style.height = crop.h * s + 'px';
+    renderGuides();
   }
 
   function moveBy(dx, dy) {
@@ -865,6 +955,152 @@
 
   new ResizeObserver(render).observe(sourcePreview);
 
+  // --- Guides -----------------------------------------------------------
+  // Composition overlays, drawn in crop pixels into an SVG stretched over
+  // the crop rectangle. Strokes don't scale, so lines stay 1px on screen.
+
+  const PHI = (1 + Math.sqrt(5)) / 2;
+  // How many ways round the lopsided guides can face. The rest look the
+  // same every way.
+  const GUIDE_TURNS = { spiral: 4, triangles: 2 };
+  // Mirrorings in x and y that take the spiral's eye clockwise round the
+  // frame, starting at the lower right.
+  const SPIRAL_FLIPS = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const SPIRAL = goldenSpiral();
+  const GUIDES = guideBtns.map(b => b.dataset.guide);
+  let guidesKey = '';
+
+  // Fibonacci spiral of a landscape golden rectangle, squashed into the unit
+  // square: a quarter circle through each square cut off what is left of
+  // the rectangle, winding clockwise in to an eye at the lower right.
+  // Returns the curve and the first few cuts as polylines, each a flat
+  // [x0, y0, x1, y1, …] array.
+  function goldenSpiral() {
+    const STEPS = 16;
+    let x = 0, y = 0, w = PHI, h = 1;
+    const arc = [];
+    const cuts = [];
+    for (let i = 0; i < 12; i++) {
+      let s, cx, cy, start;
+      switch (i % 4) {
+        case 0: // square off the left
+          s = h; cx = x + s; cy = y + s; start = Math.PI;
+          cuts.push([x + s, y, x + s, y + h]);
+          x += s; w -= s;
+          break;
+        case 1: // off the top
+          s = w; cx = x; cy = y + s; start = 1.5 * Math.PI;
+          cuts.push([x, y + s, x + w, y + s]);
+          y += s; h -= s;
+          break;
+        case 2: // off the right
+          s = h; cx = x + w - s; cy = y; start = 0;
+          cuts.push([x + w - s, y, x + w - s, y + h]);
+          w -= s;
+          break;
+        default: // off the bottom
+          s = w; cx = x + s; cy = y + h - s; start = 0.5 * Math.PI;
+          cuts.push([x, y + h - s, x + w, y + h - s]);
+          h -= s;
+      }
+      for (let j = i ? 1 : 0; j <= STEPS; j++) {
+        const t = start + j / STEPS * Math.PI / 2;
+        arc.push(cx + s * Math.cos(t), cy + s * Math.sin(t));
+      }
+    }
+    const squash = line => line.map((v, i) => i % 2 ? v : v / PHI);
+    return { arc: squash(arc), cuts: cuts.slice(0, 7).map(squash) };
+  }
+
+  // The lines of guide `kind` over a w × h crop, as major and minor lists
+  // of polylines.
+  function guideLines(kind, w, h, turn) {
+    const major = [], minor = [];
+    const cross = (xs, ys) => {
+      for (const x of xs) major.push([x, 0, x, h]);
+      for (const y of ys) major.push([0, y, w, y]);
+    };
+    switch (kind) {
+      case 'thirds':
+        cross([w / 3, w * 2 / 3], [h / 3, h * 2 / 3]);
+        break;
+      case 'phi':
+        cross([w / PHI / PHI, w / PHI], [h / PHI / PHI, h / PHI]);
+        break;
+      case 'center':
+        cross([w / 2], [h / 2]);
+        break;
+      case 'diagonals': {
+        // 45° from each corner until they meet the far side.
+        const s = Math.min(w, h);
+        major.push([0, 0, s, s], [w, 0, w - s, s], [0, h, s, h - s], [w, h, w - s, h - s]);
+        break;
+      }
+      case 'triangles': {
+        // A diagonal, and the perpendiculars to it from the other corners.
+        const d = w * w + h * h;
+        const p = w * w / d, q = h * h / d;
+        let lines = [[0, 0, w, h], [w, 0, w * p, h * p], [0, h, w * q, h * q]];
+        if (turn % 2) lines = lines.map(l => l.map((v, i) => i % 2 ? v : w - v));
+        major.push(...lines);
+        break;
+      }
+      case 'spiral': {
+        // A portrait frame takes the spiral transposed, so the first square
+        // still comes off a short side.
+        const [fx, fy] = SPIRAL_FLIPS[turn % 4];
+        const place = line => {
+          const out = [];
+          for (let i = 0; i < line.length; i += 2) {
+            let [u, v] = h > w ? [line[i + 1], line[i]] : [line[i], line[i + 1]];
+            if (fx) u = 1 - u;
+            if (fy) v = 1 - v;
+            out.push(u * w, v * h);
+          }
+          return out;
+        };
+        major.push(place(SPIRAL.arc));
+        minor.push(...SPIRAL.cuts.map(place));
+        break;
+      }
+    }
+    return { major, minor };
+  }
+
+  function renderGuides() {
+    const key = [guide, guideTurn, crop.w, crop.h].join();
+    if (key === guidesKey) return;
+    guidesKey = key;
+    const { major, minor } = guideLines(guide, crop.w, crop.h, guideTurn);
+    const toPath = lines => lines.map(l => 'M' + l.map(v => +v.toFixed(1)).join(' ')).join('');
+    const layers = [['minor', toPath(minor)], ['major', toPath(major)]].filter(([, d]) => d);
+    const paths = [];
+    // Every shade goes under every line.
+    for (const look of ['shade', 'line']) {
+      for (const [weight, d] of layers) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('class', `${look} ${weight}`);
+        path.setAttribute('d', d);
+        paths.push(path);
+      }
+    }
+    guidesEl.setAttribute('viewBox', `0 0 ${crop.w} ${crop.h}`);
+    guidesEl.replaceChildren(...paths);
+  }
+
+  function setGuide(name) {
+    guide = name;
+    for (const b of guideBtns) b.classList.toggle('active', b.dataset.guide === name);
+    guideTurnBtn.disabled = !GUIDE_TURNS[name];
+    renderGuides();
+  }
+
+  function turnGuide() {
+    if (!GUIDE_TURNS[guide]) return;
+    guideTurn = (guideTurn + 1) % GUIDE_TURNS[guide];
+    renderGuides();
+  }
+
   // --- Drag / resize ----------------------------------------------------
   // Moving keeps the size. A corner drag scales the crop about the opposite
   // corner, so the aspect ratio never changes and the size maps back to a
@@ -883,7 +1119,7 @@
     const start = { ...crop };
     const s = displayScale();
     const [fw, fh] = frameSize();
-    const aspect = fw / fh;
+    const ratio = fw / fh;
 
     let anchor = null, sx = 0, sy = 0, maxW = 0;
     if (mode !== 'move') {
@@ -898,7 +1134,7 @@
       };
       const availW = west ? anchor.x : srcW - anchor.x;
       const availH = north ? anchor.y : srcH - anchor.y;
-      maxW = Math.min(availW, availH * aspect);
+      maxW = Math.min(availW, availH * ratio);
     }
 
     function onMove(ev) {
@@ -910,7 +1146,7 @@
         moveBy(dx, dy);
         return;
       }
-      const dw = (sx * dx + sy * dy * aspect) / 2;
+      const dw = (sx * dx + sy * dy * ratio) / 2;
       const w = clamp(start.w + dw, fw / maxFactor(), maxW);
       setFactor(fw / w, { anchor });
     }
@@ -928,9 +1164,13 @@
   });
 
   cropRect.addEventListener('keydown', e => {
-    if (e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    const key = e.key.toLowerCase();
+    if ((key === 'r' || key === 'o') && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      if (!e.repeat) rotateFrame();
+      if (e.repeat) return;
+      if (key === 'r') rotateFrame();
+      else if (e.shiftKey) turnGuide();
+      else setGuide(GUIDES[(GUIDES.indexOf(guide) + 1) % GUIDES.length]);
       return;
     }
     const step = (e.shiftKey ? 10 : 1) / displayScale();
@@ -992,10 +1232,11 @@
       const base = sourceFile.name.replace(/\.[^.]+$/, '') || 'image';
       const mp = w * h / 1e6;
       const mpTag = String(+mp.toFixed(mp < 1 ? 2 : 1));
+      const ratioTag = ratioLabel('x');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${base}_${mpTag}MP.${mimeToExt(mime)}`;
+      a.download = `${base}_${mpTag}MP${ratioTag ? '_' + ratioTag : ''}.${mimeToExt(mime)}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1031,6 +1272,15 @@
     if (file) loadFile(file);
   });
 
+  aspectRow.addEventListener('click', e => {
+    const btn = e.target.closest('.format-btn');
+    if (!btn) return;
+    for (const b of aspectBtns) b.classList.toggle('active', b === btn);
+    aspect = btn.dataset.aspect ? btn.dataset.aspect.split(':').map(Number) : null;
+    updateFrameControls();
+    setFactor(wantedFactor);
+  });
+
   for (const btn of presetBtns) {
     btn.addEventListener('click', () => setFactor(presetFactor(btn)));
   }
@@ -1038,7 +1288,8 @@
   mpInput.addEventListener('input', () => {
     const mp = parseFloat(mpInput.value);
     if (!Number.isFinite(mp) || mp <= 0) return;
-    setFactor(Math.sqrt(srcW * srcH / (mp * 1e6)), { skip: mpInput });
+    const [fw, fh] = frameSize();
+    setFactor(Math.sqrt(fw * fh / (mp * 1e6)), { skip: mpInput });
   });
 
   factorInput.addEventListener('input', () => {
@@ -1059,6 +1310,12 @@
     btn.classList.add('active');
     currentFormat = btn.dataset.format;
   });
+
+  guideRow.addEventListener('click', e => {
+    const btn = e.target.closest('[data-guide]');
+    if (btn) setGuide(btn.dataset.guide);
+  });
+  guideTurnBtn.addEventListener('click', turnGuide);
 
   downloadBtn.addEventListener('click', download);
   centerBtn.addEventListener('click', () => setFactor(wantedFactor, { center: true }));
