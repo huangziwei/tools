@@ -46,6 +46,8 @@
   }
 
   * { box-sizing: border-box; }
+  /* Rules like .drop-zone's display: block would otherwise beat the attribute. */
+  [hidden] { display: none !important; }
   html, body { margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -59,7 +61,7 @@
     padding: 3rem 1.5rem 2rem;
     -webkit-font-smoothing: antialiased;
   }
-  main { width: 100%; max-width: 760px; }
+  main { width: 100%; max-width: 1160px; }
 
   .page-header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.5rem; }
   h1 { font-size: 1.75rem; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
@@ -84,7 +86,9 @@
     border-color: var(--accent);
     background: var(--panel-active);
   }
-  .drop-zone:focus-within {
+  /* The input sits just before the drop zone, not inside it, so it can still
+     be clicked from script once the drop zone is hidden. */
+  #fileInput:focus-visible + .drop-zone {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
   }
@@ -111,28 +115,99 @@
     color: var(--fg);
   }
 
-  .section { margin-top: 1.4rem; }
+  /* Photo on the left, controls in a panel on the right; stacked when
+     narrow, with the file bar first. */
+  .editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: "view file" "view controls";
+    grid-template-rows: auto 1fr;
+    gap: 1rem 1.5rem;
+    align-items: start;
+  }
+  .view { grid-area: view; position: sticky; top: 1rem; }
+  .file-bar { grid-area: file; }
+  .controls { grid-area: controls; }
+  @media (max-width: 980px) {
+    .editor {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "file" "view" "controls";
+      grid-template-rows: none;
+    }
+    .view { position: static; }
+  }
 
-  .source-info {
+  .file-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.7rem 0.95rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.9rem;
+  }
+  .file-bar-icon { color: var(--muted); display: flex; flex-shrink: 0; }
+  .file-bar-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.35;
+  }
+  .file-bar-info strong {
+    font-weight: 500;
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-bar-info .file-meta { color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+  .btn-link {
+    background: none;
+    border: 0;
+    color: var(--accent);
+    cursor: pointer;
+    font-family: inherit;
     font-size: 0.85rem;
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-    margin-bottom: 0.75rem;
-    word-break: break-word;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    flex-shrink: 0;
   }
-  .source-info strong { color: var(--fg); font-weight: 500; }
+  .btn-link:hover:not(:disabled) { color: var(--accent-hover); text-decoration: underline; }
+  .btn-link:disabled { opacity: 0.4; cursor: default; }
 
-  .preset-group { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.5rem; }
-  .preset-group-label {
-    flex: 0 0 7.5rem;
-    font-size: 0.78rem;
-    color: var(--muted);
+  .toolbar { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .btn-secondary { padding: 0.35rem 0.75rem; }
+  .toolbar-field { display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--muted); }
+  select {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--fg);
+    outline: none;
   }
-  @media (max-width: 520px) {
-    .preset-group { flex-direction: column; gap: 0.3rem; }
-    .preset-group-label { flex: none; }
+  select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
   }
-  .preset-row, .format-row {
+
+  .group + .group { margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid var(--border); }
+  .group-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.45rem; }
+  .group-head .field-label { margin: 0; }
+  .sub-label { display: block; font-size: 0.78rem; color: var(--muted); margin: 0.6rem 0 0.35rem; }
+  .field-label + .sub-label { margin-top: 0; }
+
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    gap: 0.4rem;
+  }
+  .format-row {
     display: flex;
     gap: 0.4rem;
     flex-wrap: wrap;
@@ -170,10 +245,11 @@
     flex-wrap: wrap;
   }
   .size-field { display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--muted); }
+  .size-field:has(input:disabled), .check-row:has(input:disabled) { opacity: 0.5; }
   input[type="number"] {
-    width: 6.5rem;
-    padding: 0.55rem 0.75rem;
-    font-size: 0.95rem;
+    width: 5.5rem;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.9rem;
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     background: var(--panel);
@@ -187,7 +263,7 @@
   }
 
   .crop-info {
-    margin-top: 0.8rem;
+    margin-top: 0.6rem;
     font-size: 0.85rem;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
@@ -196,7 +272,7 @@
   .crop-info strong { color: var(--fg); font-weight: 500; }
 
   .stage-wrap {
-    margin-top: 1.25rem;
+    margin-top: 0.6rem;
     padding: 0.75rem;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -219,6 +295,11 @@
     max-height: 70vh;
     pointer-events: none;
     transform-origin: 0 0;
+  }
+  /* Beside the panel the photo may be taller, but the whole sticky view
+     (toolbar, photo, info) still has to fit on screen. */
+  @media (min-width: 981px) {
+    .stage img { max-height: calc(100vh - 13rem); }
   }
   .crop-rect {
     position: absolute;
@@ -277,10 +358,9 @@
   .h-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
   .h-se { bottom: -7px; right: -7px; cursor: nwse-resize; }
   .stage-hint {
-    margin-top: 0.5rem;
+    margin: 0.25rem 0 0;
     font-size: 0.78rem;
     color: var(--muted);
-    text-align: center;
   }
 
   .adjust-grid {
@@ -296,27 +376,7 @@
   .adjust-foot { display: flex; align-items: center; gap: 0.4rem 0.75rem; margin-top: 0.6rem; flex-wrap: wrap; }
   .adjust-foot .field-hint { margin: 0; }
 
-  details.advanced {
-    margin-top: 1.25rem;
-    border-top: 1px solid var(--border);
-    padding-top: 1rem;
-  }
-  details.advanced > summary {
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--muted);
-    user-select: none;
-    list-style: none;
-  }
-  details.advanced > summary::-webkit-details-marker { display: none; }
-  details.advanced > summary::before {
-    content: "▸";
-    display: inline-block;
-    width: 1em;
-    color: var(--muted);
-  }
-  details.advanced[open] > summary::before { content: "▾"; }
+  .export-options { display: flex; align-items: center; gap: 0.5rem 1.25rem; margin-top: 0.7rem; flex-wrap: wrap; }
   .check-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
   .field-hint { font-size: 0.78rem; color: var(--muted); margin: 0.35rem 0 0; }
 
@@ -360,7 +420,7 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .btn-row { margin-top: 1.25rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .btn-block { display: block; width: 100%; margin-top: 0.9rem; }
   .btn-primary {
     padding: 0.6rem 1.4rem;
     font-size: 0.9rem;
@@ -407,6 +467,7 @@
   </div>
   <p class="lead">Straighten a photo and crop it down to a target megapixel count, in its own aspect ratio or one of Fujifilm's.</p>
 
+  <input type="file" id="fileInput" accept="image/*">
   <label class="drop-zone" id="dropZone" for="fileInput">
     <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M6 2v14a2 2 0 0 0 2 2h14"/>
@@ -414,138 +475,134 @@
     </svg>
     <p class="drop-text"><strong>Drop an image here</strong> or click to choose</p>
     <p class="drop-hint">JPEG, PNG, WebP</p>
-    <input type="file" id="fileInput" accept="image/*">
   </label>
 
-  <div id="configSection" style="display:none">
-    <div class="section">
-      <div class="source-info" id="sourceInfo"></div>
+  <div class="status" id="loadStatus" role="status" aria-live="polite"></div>
 
-      <span class="field-label">Aspect ratio</span>
-      <div class="format-row" id="aspectRow">
-        <button type="button" class="format-btn active" data-aspect="" title="Keep the photo's own aspect ratio">Original</button>
-        <button type="button" class="format-btn" data-aspect="1:1" title="Square, on X and GFX cameras">1:1</button>
-        <button type="button" class="format-btn" data-aspect="7:6" title="6×7 medium format, on GFX cameras">7:6</button>
-        <button type="button" class="format-btn" data-aspect="5:4" title="4×5 large format, on GFX cameras and 40 MP X cameras such as the X-T5 and X100VI">5:4</button>
-        <button type="button" class="format-btn" data-aspect="4:3" title="The GFX sensor's shape, also on 40 MP X cameras such as the X-T5 and X100VI. Rotate the frame for the GFX100RF's 3:4">4:3</button>
-        <button type="button" class="format-btn" data-aspect="3:2" title="The X-series sensor's shape, also on GFX cameras">3:2</button>
-        <button type="button" class="format-btn" data-aspect="16:9" title="Widescreen, on X and GFX cameras">16:9</button>
-        <button type="button" class="format-btn" data-aspect="65:24" title="XPan / TX-1 panorama, on GFX cameras">65:24</button>
-        <button type="button" class="format-btn" data-aspect="17:6" title="6×17 panorama of the G617, on the GFX100RF">17:6</button>
+  <div class="editor" id="editor" hidden>
+    <div class="view">
+      <div class="toolbar">
+        <label class="toolbar-field">Guides
+          <select id="guideSelect">
+            <option value="none">None</option>
+            <option value="thirds" selected>Rule of thirds</option>
+            <option value="phi">Golden ratio</option>
+            <option value="spiral">Golden spiral</option>
+            <option value="triangles">Golden triangles</option>
+            <option value="diagonals">Diagonals</option>
+            <option value="center">Center lines</option>
+            <option value="grid">Grid</option>
+          </select>
+        </label>
+        <button type="button" class="btn-secondary" id="guideTurnBtn" title="Turn the spiral or triangles to another corner (Shift+O)" disabled>Flip</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn-secondary" id="rotateBtn" title="Turn the crop frame 90° (R)">Rotate frame</button>
+        <button type="button" class="btn-secondary" id="centerBtn" title="Move the crop to the middle of the photo">Center</button>
       </div>
+      <div class="stage-wrap">
+        <div class="stage" id="stage">
+          <img id="sourcePreview" alt="Image to crop">
+          <div class="crop-rect" id="cropRect" data-handle="move" tabindex="0" aria-label="Crop area. Arrow keys move it, R rotates it, O changes the guide.">
+            <svg class="guides" id="guides" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <span class="crop-label" id="cropLabel"></span>
+            <div class="handle h-nw" data-handle="nw"></div>
+            <div class="handle h-ne" data-handle="ne"></div>
+            <div class="handle h-sw" data-handle="sw"></div>
+            <div class="handle h-se" data-handle="se"></div>
+          </div>
+        </div>
+      </div>
+      <div class="crop-info" id="cropInfo"></div>
+      <p class="stage-hint">Drag to move, a corner to resize; arrow keys nudge (Shift: ×10). R rotates the frame, O cycles guides, Shift+O flips them. Drop a photo anywhere to switch.</p>
     </div>
 
-    <div class="section">
-      <span class="field-label">Target</span>
-      <div class="preset-group">
-        <span class="preset-group-label">Teleconverter</span>
-        <div class="preset-row" id="teleRow">
+    <div class="file-bar">
+      <span class="file-bar-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+      </span>
+      <span class="file-bar-info">
+        <strong id="fileName"></strong>
+        <span class="file-meta" id="fileMeta"></span>
+      </span>
+      <button class="btn-link" id="changeFileBtn" type="button">Choose another</button>
+    </div>
+
+    <div class="controls">
+      <div class="group">
+        <span class="field-label">Aspect ratio</span>
+        <div class="format-row" id="aspectRow">
+          <button type="button" class="format-btn active" data-aspect="" title="Keep the photo's own aspect ratio">Original</button>
+          <button type="button" class="format-btn" data-aspect="1:1" title="Square, on X and GFX cameras">1:1</button>
+          <button type="button" class="format-btn" data-aspect="7:6" title="6×7 medium format, on GFX cameras">7:6</button>
+          <button type="button" class="format-btn" data-aspect="5:4" title="4×5 large format, on GFX cameras and 40 MP X cameras such as the X-T5 and X100VI">5:4</button>
+          <button type="button" class="format-btn" data-aspect="4:3" title="The GFX sensor's shape, also on 40 MP X cameras such as the X-T5 and X100VI. Rotate the frame for the GFX100RF's 3:4">4:3</button>
+          <button type="button" class="format-btn" data-aspect="3:2" title="The X-series sensor's shape, also on GFX cameras">3:2</button>
+          <button type="button" class="format-btn" data-aspect="16:9" title="Widescreen, on X and GFX cameras">16:9</button>
+          <button type="button" class="format-btn" data-aspect="65:24" title="XPan / TX-1 panorama, on GFX cameras">65:24</button>
+          <button type="button" class="format-btn" data-aspect="17:6" title="6×17 panorama of the G617, on the GFX100RF">17:6</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="field-label">Size</span>
+        <span class="sub-label">Teleconverter</span>
+        <div class="preset-grid">
           <button type="button" class="preset-btn" data-factor="1.4142135623730951" title="Fujifilm's 1.4× digital teleconverter: √2 crop, half the pixels">1.4×<small>½ pixels</small></button>
           <button type="button" class="preset-btn" data-factor="2" title="Fujifilm's 2× digital teleconverter: a quarter of the pixels">2×<small>¼ pixels</small></button>
         </div>
-      </div>
-      <div class="preset-group">
-        <span class="preset-group-label">Sensor size</span>
-        <div class="preset-row" id="sensorRow">
+        <span class="sub-label">Sensor size</span>
+        <div class="preset-grid">
           <button type="button" class="preset-btn" data-pixels="39814656" title="X-Trans CMOS 5 HR, 7728 × 5152 (X-T5, X-H2, X100VI, X-T50, X-E5…)">40 MP<small>X-Trans V HR</small></button>
           <button type="button" class="preset-btn" data-pixels="25958400" title="X-Trans CMOS 4, 6240 × 4160 (X-T3, X-T4, X-T30, X-S10, X-E4, X100V…)">26 MP<small>X-Trans IV</small></button>
           <button type="button" class="preset-btn" data-pixels="24000000" title="X-Trans CMOS III, 6000 × 4000 (X-T2, X-T20, X-Pro2, X-E3, X100F…)">24 MP<small>X-Trans III</small></button>
           <button type="button" class="preset-btn" data-pixels="15980544" title="X-Trans CMOS / CMOS II, 4896 × 3264 (X-E1, X-Pro1, X-T1, X-E2, X100T…)">16 MP<small>X-Trans I/II</small></button>
         </div>
-      </div>
-
-      <div class="size-row">
-        <label class="size-field">
-          <input type="number" id="mpInput" step="0.1" min="0.01"> MP
-        </label>
-        <label class="size-field">
-          <input type="number" id="factorInput" step="0.05" min="1"> &times; crop factor
-        </label>
-      </div>
-      <div class="crop-info" id="cropInfo"></div>
-    </div>
-
-    <div class="stage-wrap">
-      <div class="stage" id="stage">
-        <img id="sourcePreview" alt="Image to crop">
-        <div class="crop-rect" id="cropRect" data-handle="move" tabindex="0" aria-label="Crop area. Arrow keys move it, R rotates it, O changes the guide.">
-          <svg class="guides" id="guides" preserveAspectRatio="none" aria-hidden="true"></svg>
-          <span class="crop-label" id="cropLabel"></span>
-          <div class="handle h-nw" data-handle="nw"></div>
-          <div class="handle h-ne" data-handle="ne"></div>
-          <div class="handle h-sw" data-handle="sw"></div>
-          <div class="handle h-se" data-handle="se"></div>
+        <div class="size-row">
+          <label class="size-field"><input type="number" id="mpInput" step="0.1" min="0.01"> MP</label>
+          <label class="size-field"><input type="number" id="factorInput" step="0.05" min="1"> &times; crop factor</label>
         </div>
       </div>
-    </div>
-    <p class="stage-hint">Drag to move. Drag a corner to resize. Arrow keys nudge (Shift for bigger steps). R rotates the frame. O cycles the guides, Shift+O flips them.</p>
 
-    <div class="section">
-      <span class="field-label">Transform</span>
-      <div class="adjust-grid" id="adjustGrid">
-        <label for="rollRange" title="Turn the photo to level it; positive is clockwise">Straighten</label>
-        <input type="range" id="rollRange" data-adjust="roll" min="-45" max="45" step="0.1" value="0">
-        <span class="adjust-num"><input type="number" data-adjust="roll" min="-45" max="45" step="0.1" value="0" aria-label="Straighten, degrees">°</span>
-        <label for="tiltRange" title="Make converging verticals parallel; positive widens the top">Vertical</label>
-        <input type="range" id="tiltRange" data-adjust="tilt" min="-30" max="30" step="0.1" value="0">
-        <span class="adjust-num"><input type="number" data-adjust="tilt" min="-30" max="30" step="0.1" value="0" aria-label="Vertical, degrees">°</span>
-        <label for="panRange" title="Square up a wall seen at an angle; positive makes the right side taller">Horizontal</label>
-        <input type="range" id="panRange" data-adjust="pan" min="-30" max="30" step="0.1" value="0">
-        <span class="adjust-num"><input type="number" data-adjust="pan" min="-30" max="30" step="0.1" value="0" aria-label="Horizontal, degrees">°</span>
-      </div>
-      <div class="adjust-foot">
-        <button type="button" class="format-btn" id="adjustResetBtn" disabled>Reset</button>
+      <div class="group">
+        <div class="group-head">
+          <span class="field-label">Transform</span>
+          <button type="button" class="btn-link" id="adjustResetBtn" disabled>Reset</button>
+        </div>
+        <div class="adjust-grid" id="adjustGrid">
+          <label for="rollRange" title="Turn the photo to level it; positive is clockwise">Straighten</label>
+          <input type="range" id="rollRange" data-adjust="roll" min="-45" max="45" step="0.1" value="0">
+          <span class="adjust-num"><input type="number" data-adjust="roll" min="-45" max="45" step="0.1" value="0" aria-label="Straighten, degrees">°</span>
+          <label for="tiltRange" title="Make converging verticals parallel; positive widens the top">Vertical</label>
+          <input type="range" id="tiltRange" data-adjust="tilt" min="-30" max="30" step="0.1" value="0">
+          <span class="adjust-num"><input type="number" data-adjust="tilt" min="-30" max="30" step="0.1" value="0" aria-label="Vertical, degrees">°</span>
+          <label for="panRange" title="Square up a wall seen at an angle; positive makes the right side taller">Horizontal</label>
+          <input type="range" id="panRange" data-adjust="pan" min="-30" max="30" step="0.1" value="0">
+          <span class="adjust-num"><input type="number" data-adjust="pan" min="-30" max="30" step="0.1" value="0" aria-label="Horizontal, degrees">°</span>
+        </div>
         <p class="field-hint"><span id="lensHint"></span> Double-click a slider to zero it.</p>
       </div>
-    </div>
 
-    <div class="section">
-      <span class="field-label">Guides</span>
-      <div class="format-row" id="guideRow">
-        <button type="button" class="format-btn" data-guide="none">None</button>
-        <button type="button" class="format-btn active" data-guide="thirds" title="Lines a third of the way in from each side">Rule of thirds</button>
-        <button type="button" class="format-btn" data-guide="phi" title="Lines 0.382 of the way in from each side: the phi grid">Golden ratio</button>
-        <button type="button" class="format-btn" data-guide="spiral" title="Fibonacci spiral winding in towards the subject">Golden spiral</button>
-        <button type="button" class="format-btn" data-guide="triangles" title="A diagonal, met at right angles by lines from the other two corners">Golden triangles</button>
-        <button type="button" class="format-btn" data-guide="diagonals" title="Lines at 45° from each corner">Diagonals</button>
-        <button type="button" class="format-btn" data-guide="center" title="Lines through the middle, for symmetry">Center lines</button>
-        <button type="button" class="format-btn" data-guide="grid" title="Square grid for lining things up; it also shows while you drag a Transform slider">Grid</button>
-        <button type="button" class="format-btn" id="guideTurnBtn" title="Turn the spiral or triangles to another corner (Shift+O)" disabled>Flip</button>
+      <div class="group">
+        <span class="field-label">Export</span>
+        <div class="format-row" id="formatRow">
+          <button type="button" class="format-btn active" data-format="auto">Auto</button>
+          <button type="button" class="format-btn" data-format="image/jpeg">JPEG</button>
+          <button type="button" class="format-btn" data-format="image/webp">WebP</button>
+          <button type="button" class="format-btn" data-format="image/png">PNG</button>
+        </div>
+        <div class="export-options">
+          <label class="size-field" title="JPEG and WebP quality, 1–100">Quality <input type="number" id="qualityInput" value="95" min="1" max="100" step="1"></label>
+          <label class="check-row" title="Camera, lens, exposure and date are kept. Orientation and pixel size are updated, and the embedded thumbnail is dropped.">
+            <input type="checkbox" id="keepExifInput" checked> Keep EXIF
+          </label>
+        </div>
+        <button class="btn-primary btn-block" id="downloadBtn">Download</button>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
       </div>
-    </div>
-
-    <div class="section">
-      <span class="field-label">Output format</span>
-      <div class="format-row" id="formatRow">
-        <button type="button" class="format-btn active" data-format="auto">Auto</button>
-        <button type="button" class="format-btn" data-format="image/jpeg">JPEG</button>
-        <button type="button" class="format-btn" data-format="image/webp">WebP</button>
-        <button type="button" class="format-btn" data-format="image/png">PNG</button>
-      </div>
-    </div>
-
-    <details class="advanced">
-      <summary>Advanced</summary>
-      <div class="section">
-        <label class="field-label" for="qualityInput">JPEG / WebP quality (1–100)</label>
-        <input type="number" id="qualityInput" value="95" min="1" max="100" step="1">
-      </div>
-      <div class="section">
-        <label class="check-row">
-          <input type="checkbox" id="keepExifInput" checked>
-          Keep EXIF metadata (JPEG to JPEG)
-        </label>
-        <p class="field-hint">Camera, lens, exposure and date are kept. Orientation and pixel size are updated, and the embedded thumbnail is dropped.</p>
-      </div>
-    </details>
-
-    <div class="status" id="status"></div>
-
-    <div class="btn-row">
-      <button class="btn-primary" id="downloadBtn">Download</button>
-      <button class="btn-secondary" id="centerBtn">Center</button>
-      <button class="btn-secondary" id="rotateBtn" title="Turn the crop frame 90° (R)">Rotate frame</button>
-      <button class="btn-secondary" id="resetBtn">Start over</button>
     </div>
   </div>
 
@@ -558,8 +615,11 @@
 <script>
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
-  const configSection = document.getElementById('configSection');
-  const sourceInfo = document.getElementById('sourceInfo');
+  const editor = document.getElementById('editor');
+  const fileName = document.getElementById('fileName');
+  const fileMeta = document.getElementById('fileMeta');
+  const changeFileBtn = document.getElementById('changeFileBtn');
+  const loadStatus = document.getElementById('loadStatus');
   const presetBtns = [...document.querySelectorAll('.preset-btn')];
   const mpInput = document.getElementById('mpInput');
   const factorInput = document.getElementById('factorInput');
@@ -575,11 +635,9 @@
   const downloadBtn = document.getElementById('downloadBtn');
   const centerBtn = document.getElementById('centerBtn');
   const rotateBtn = document.getElementById('rotateBtn');
-  const resetBtn = document.getElementById('resetBtn');
   const aspectRow = document.getElementById('aspectRow');
   const aspectBtns = [...aspectRow.querySelectorAll('.format-btn')];
-  const guideRow = document.getElementById('guideRow');
-  const guideBtns = [...guideRow.querySelectorAll('[data-guide]')];
+  const guideSelect = document.getElementById('guideSelect');
   const guideTurnBtn = document.getElementById('guideTurnBtn');
   const guidesEl = document.getElementById('guides');
   const adjustGrid = document.getElementById('adjustGrid');
@@ -664,14 +722,11 @@
 
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
-  function setStatus(kind, html) {
-    if (!kind) {
-      statusEl.className = 'status';
-      statusEl.innerHTML = '';
-      return;
-    }
-    statusEl.className = 'status ' + kind;
-    statusEl.innerHTML = html;
+  // Export messages show under Download. Load errors go to `loadStatus`, the
+  // only one on screen before a photo has loaded.
+  function setStatus(kind, html, el = statusEl) {
+    el.className = kind ? 'status ' + kind : 'status';
+    el.innerHTML = kind ? html : '';
   }
 
   // --- EXIF -------------------------------------------------------------
@@ -794,10 +849,10 @@
   async function loadFile(file) {
     const seq = ++loadSeq;
     if (!file || !file.type.startsWith('image/')) {
-      setStatus('error', 'Please choose an image file.');
+      setStatus('error', 'Please choose an image file.', loadStatus);
       return;
     }
-    setStatus(null);
+    setStatus(null, '', loadStatus);
 
     let fileExif = null;
     if (file.type === 'image/jpeg') {
@@ -837,19 +892,23 @@
         : `Vertical and Horizontal assume a ${DEFAULT_FOCAL35} mm lens (35 mm equivalent); the photo has no focal length in EXIF.`;
       updateFrameControls();
 
-      const parts = [`<strong>${escapeHtml(file.name)}</strong>`];
-      if (exif && exif.model) parts.push(escapeHtml(exif.model));
-      parts.push(`${srcW}&times;${srcH}`, formatMP(srcW * srcH), formatBytes(file.size));
-      sourceInfo.innerHTML = parts.join(' &middot; ');
+      fileName.textContent = file.name;
+      const meta = [];
+      if (exif && exif.model) meta.push(escapeHtml(exif.model));
+      meta.push(`${srcW}&times;${srcH}`, formatMP(srcW * srcH), formatBytes(file.size));
+      fileMeta.innerHTML = meta.join(' &middot; ');
+      setStatus(null);
+      syncExportOptions();
 
       sourcePreview.src = url;
-      configSection.style.display = '';
+      dropZone.hidden = true;
+      editor.hidden = false;
       setFactor(wantedFactor, { center: true });
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
       if (seq === loadSeq) {
-        setStatus('error', 'Could not decode this image. Your browser may not support this format.');
+        setStatus('error', 'Could not decode this image. Your browser may not support this format.', loadStatus);
       }
     };
     img.src = url;
@@ -1254,7 +1313,7 @@
   // frame, starting at the lower right.
   const SPIRAL_FLIPS = [[0, 0], [1, 0], [1, 1], [0, 1]];
   const SPIRAL = goldenSpiral();
-  const GUIDES = guideBtns.map(b => b.dataset.guide);
+  const GUIDES = [...guideSelect.options].map(o => o.value);
   let guidesKey = '';
 
   // Fibonacci spiral of a landscape golden rectangle, squashed into the unit
@@ -1393,7 +1452,7 @@
 
   function setGuide(name) {
     guide = name;
-    for (const b of guideBtns) b.classList.toggle('active', b.dataset.guide === name);
+    guideSelect.value = name;
     guideTurnBtn.disabled = !GUIDE_TURNS[name];
     renderGuides();
   }
@@ -1491,6 +1550,14 @@
     if (currentFormat !== 'auto') return currentFormat;
     if (['image/jpeg', 'image/png', 'image/webp'].includes(sourceFile.type)) return sourceFile.type;
     return 'image/jpeg';
+  }
+
+  // Quality only applies to JPEG and WebP, and EXIF only carries over from
+  // a JPEG that has it to a JPEG.
+  function syncExportOptions() {
+    const mime = pickOutputMime();
+    qualityInput.disabled = mime === 'image/png';
+    keepExifInput.disabled = !(mime === 'image/jpeg' && exif);
   }
 
   // Fills output rows v0…v1−1 of a w-wide crop at (ox, oy), sampling the
@@ -1642,6 +1709,8 @@
 
   fileInput.addEventListener('change', e => {
     if (e.target.files[0]) loadFile(e.target.files[0]);
+    // Lets the same file be chosen again.
+    e.target.value = '';
   });
 
   ['dragenter', 'dragover'].forEach(n => {
@@ -1655,10 +1724,6 @@
       e.preventDefault();
       dropZone.classList.remove('drag-over');
     });
-  });
-  dropZone.addEventListener('drop', e => {
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) loadFile(file);
   });
 
   aspectRow.addEventListener('click', e => {
@@ -1698,12 +1763,10 @@
     formatRow.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentFormat = btn.dataset.format;
+    syncExportOptions();
   });
 
-  guideRow.addEventListener('click', e => {
-    const btn = e.target.closest('[data-guide]');
-    if (btn) setGuide(btn.dataset.guide);
-  });
+  guideSelect.addEventListener('change', () => setGuide(guideSelect.value));
   guideTurnBtn.addEventListener('click', turnGuide);
 
   adjustGrid.addEventListener('input', e => {
@@ -1739,21 +1802,16 @@
   centerBtn.addEventListener('click', () => setFactor(wantedFactor, { center: true }));
   rotateBtn.addEventListener('click', rotateFrame);
 
-  resetBtn.addEventListener('click', () => {
-    loadSeq++;
-    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
-    sourceUrl = null;
-    sourceFile = null; sourceImg = null; exif = null;
-    srcW = srcH = 0;
-    sourcePreview.removeAttribute('src');
-    fileInput.value = '';
-    configSection.style.display = 'none';
-    setStatus(null);
-  });
+  changeFileBtn.addEventListener('click', () => fileInput.click());
 
-  // Prevent browser from opening files dropped outside the drop zone
+  // A photo dropped anywhere on the page, the drop zone included, is loaded;
+  // this also stops the browser from opening it instead.
   window.addEventListener('dragover', e => e.preventDefault());
-  window.addEventListener('drop', e => e.preventDefault());
+  window.addEventListener('drop', e => {
+    e.preventDefault();
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
 </script>
 </body>
 </html>
