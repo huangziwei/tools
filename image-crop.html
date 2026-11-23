@@ -208,6 +208,7 @@
     position: relative;
     display: inline-block;
     overflow: hidden;
+    background: #000;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -217,6 +218,7 @@
     max-width: 100%;
     max-height: 70vh;
     pointer-events: none;
+    transform-origin: 0 0;
   }
   .crop-rect {
     position: absolute;
@@ -280,6 +282,19 @@
     color: var(--muted);
     text-align: center;
   }
+
+  .adjust-grid {
+    display: grid;
+    grid-template-columns: 5.5rem 1fr auto;
+    align-items: center;
+    gap: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+  }
+  .adjust-grid input[type="range"] { width: 100%; margin: 0; accent-color: var(--accent); }
+  .adjust-num { display: flex; align-items: center; gap: 0.2rem; color: var(--muted); }
+  .adjust-num input[type="number"] { width: 4.75rem; padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+  .adjust-foot { display: flex; align-items: center; gap: 0.4rem 0.75rem; margin-top: 0.6rem; flex-wrap: wrap; }
+  .adjust-foot .field-hint { margin: 0; }
 
   details.advanced {
     margin-top: 1.25rem;
@@ -390,7 +405,7 @@
     <h1>Megapixel Cropper</h1>
     <!-- SOURCE_LINK_START --><a href="https://github.com/huangziwei/tools/blob/main/image-crop.html" target="_blank" rel="noopener" class="github-link" title="View source on GitHub"><svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a><!-- SOURCE_LINK_END -->
   </div>
-  <p class="lead">Crop a photo down to a target megapixel count, in its own aspect ratio or one of Fujifilm's.</p>
+  <p class="lead">Straighten a photo and crop it down to a target megapixel count, in its own aspect ratio or one of Fujifilm's.</p>
 
   <label class="drop-zone" id="dropZone" for="fileInput">
     <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -432,6 +447,7 @@
       <div class="preset-group">
         <span class="preset-group-label">Sensor size</span>
         <div class="preset-row" id="sensorRow">
+          <button type="button" class="preset-btn" data-pixels="39814656" title="X-Trans CMOS 5 HR, 7728 × 5152 (X-T5, X-H2, X100VI, X-T50, X-E5…)">40 MP<small>X-Trans V HR</small></button>
           <button type="button" class="preset-btn" data-pixels="25958400" title="X-Trans CMOS 4, 6240 × 4160 (X-T3, X-T4, X-T30, X-S10, X-E4, X100V…)">26 MP<small>X-Trans IV</small></button>
           <button type="button" class="preset-btn" data-pixels="24000000" title="X-Trans CMOS III, 6000 × 4000 (X-T2, X-T20, X-Pro2, X-E3, X100F…)">24 MP<small>X-Trans III</small></button>
           <button type="button" class="preset-btn" data-pixels="15980544" title="X-Trans CMOS / CMOS II, 4896 × 3264 (X-E1, X-Pro1, X-T1, X-E2, X100T…)">16 MP<small>X-Trans I/II</small></button>
@@ -465,6 +481,25 @@
     <p class="stage-hint">Drag to move. Drag a corner to resize. Arrow keys nudge (Shift for bigger steps). R rotates the frame. O cycles the guides, Shift+O flips them.</p>
 
     <div class="section">
+      <span class="field-label">Transform</span>
+      <div class="adjust-grid" id="adjustGrid">
+        <label for="rollRange" title="Turn the photo to level it; positive is clockwise">Straighten</label>
+        <input type="range" id="rollRange" data-adjust="roll" min="-45" max="45" step="0.1" value="0">
+        <span class="adjust-num"><input type="number" data-adjust="roll" min="-45" max="45" step="0.1" value="0" aria-label="Straighten, degrees">°</span>
+        <label for="tiltRange" title="Make converging verticals parallel; positive widens the top">Vertical</label>
+        <input type="range" id="tiltRange" data-adjust="tilt" min="-30" max="30" step="0.1" value="0">
+        <span class="adjust-num"><input type="number" data-adjust="tilt" min="-30" max="30" step="0.1" value="0" aria-label="Vertical, degrees">°</span>
+        <label for="panRange" title="Square up a wall seen at an angle; positive makes the right side taller">Horizontal</label>
+        <input type="range" id="panRange" data-adjust="pan" min="-30" max="30" step="0.1" value="0">
+        <span class="adjust-num"><input type="number" data-adjust="pan" min="-30" max="30" step="0.1" value="0" aria-label="Horizontal, degrees">°</span>
+      </div>
+      <div class="adjust-foot">
+        <button type="button" class="format-btn" id="adjustResetBtn" disabled>Reset</button>
+        <p class="field-hint"><span id="lensHint"></span> Double-click a slider to zero it.</p>
+      </div>
+    </div>
+
+    <div class="section">
       <span class="field-label">Guides</span>
       <div class="format-row" id="guideRow">
         <button type="button" class="format-btn" data-guide="none">None</button>
@@ -474,6 +509,7 @@
         <button type="button" class="format-btn" data-guide="triangles" title="A diagonal, met at right angles by lines from the other two corners">Golden triangles</button>
         <button type="button" class="format-btn" data-guide="diagonals" title="Lines at 45° from each corner">Diagonals</button>
         <button type="button" class="format-btn" data-guide="center" title="Lines through the middle, for symmetry">Center lines</button>
+        <button type="button" class="format-btn" data-guide="grid" title="Square grid for lining things up; it also shows while you drag a Transform slider">Grid</button>
         <button type="button" class="format-btn" id="guideTurnBtn" title="Turn the spiral or triangles to another corner (Shift+O)" disabled>Flip</button>
       </div>
     </div>
@@ -546,9 +582,19 @@
   const guideBtns = [...guideRow.querySelectorAll('[data-guide]')];
   const guideTurnBtn = document.getElementById('guideTurnBtn');
   const guidesEl = document.getElementById('guides');
+  const adjustGrid = document.getElementById('adjustGrid');
+  const adjustInputs = [...adjustGrid.querySelectorAll('[data-adjust]')];
+  const adjustResetBtn = document.getElementById('adjustResetBtn');
+  const lensHint = document.getElementById('lensHint');
 
   const MIN_SIDE = 16;
   const DEFAULT_FACTOR = Math.SQRT2;
+  // 35 mm-equivalent focal length assumed for perspective when EXIF has none.
+  const DEFAULT_FOCAL35 = 28;
+  // How far inside the corrected picture's edges the crop stays, in pixels,
+  // so their soft, half-covered pixels never get exported.
+  const EDGE_INSET = 1;
+  const NO_ADJUST = { roll: 0, tilt: 0, pan: 0 };
 
   let sourceFile = null;
   let sourceImg = null;
@@ -565,15 +611,24 @@
   // Linear crop factor relative to the largest frame of the chosen shape;
   // the crop is fw/factor × fh/factor for the frameSize() fw × fh.
   let factor = DEFAULT_FACTOR;
-  // The factor last asked for. A rotated frame may need a larger one to fit,
-  // and returns to this one when turned back.
+  // The factor last asked for. A rotated or straightened frame may need a
+  // larger one to fit, and returns to this one when turned back.
   let wantedFactor = DEFAULT_FACTOR;
-  // Crop rectangle in source pixels.
+  // Straighten (roll) and perspective (tilt, pan), in degrees.
+  let adjust = NO_ADJUST;
+  // Homography from source pixels to the corrected picture, and its
+  // inverse; null while nothing is corrected.
+  let warpH = null, warpInv = null;
+  // Half-planes {nx, ny, d}, n·p ≥ d, that the crop must stay inside.
+  let planes = [];
+  // Crop rectangle in output pixels: the source's, as corrected.
   let crop = { x: 0, y: 0, w: 0, h: 0 };
   let currentFormat = 'auto';
   let guide = 'thirds';
   // Times the guide has been flipped; see GUIDE_TURNS.
   let guideTurn = 0;
+  // A Transform slider is being dragged, so the grid stands in for the guide.
+  let adjusting = false;
 
   function formatBytes(n) {
     if (n < 1000) return n + ' B';
@@ -775,6 +830,11 @@
       srcW = img.naturalWidth;
       srcH = img.naturalHeight;
       rotated = false;
+      applyAdjust(NO_ADJUST);
+      syncAdjust(null);
+      lensHint.textContent = exif && exif.focal35
+        ? `Vertical and Horizontal use the ${exif.focal35} mm (35 mm equivalent) focal length from EXIF.`
+        : `Vertical and Horizontal assume a ${DEFAULT_FOCAL35} mm lens (35 mm equivalent); the photo has no focal length in EXIF.`;
       updateFrameControls();
 
       const parts = [`<strong>${escapeHtml(file.name)}</strong>`];
@@ -820,10 +880,11 @@
     return rotated ? [h, w] : [w, h];
   }
 
-  // Smallest factor at which the frame fits inside the source.
+  // Smallest factor at which the frame fits inside the source, as
+  // corrected.
   function minFactor() {
     const [fw, fh] = frameSize();
-    return Math.max(fw / srcW, fh / srcH);
+    return warpH ? fitFactor(fw, fh) : Math.max(fw / srcW, fh / srcH);
   }
 
   // Largest factor that keeps the crop at least MIN_SIDE pixels across. A
@@ -837,7 +898,8 @@
   // short side. A square frame has nothing to turn.
   function canRotate() {
     const [w, h] = baseFrame();
-    return w !== h && Math.max(h / srcW, w / srcH) <= maxFactor();
+    if (w === h) return false;
+    return (warpH ? fitFactor(h, w) : Math.max(h / srcW, w / srcH)) <= maxFactor();
   }
 
   // Re-checks what the frame can do after the source or its shape changes.
@@ -851,13 +913,15 @@
   }
 
   // Presets are off when the frame can't reach them in its current
-  // orientation, or when they would leave the photo whole.
+  // orientation, or when they would leave the photo whole. A correction
+  // doesn't turn them off; it only shrinks their frame until it fits.
   function updatePresets() {
     const [fw, fh] = frameSize();
-    const whole = fw === srcW && fh === srcH;
+    const reach = Math.max(fw / srcW, fh / srcH);
+    const whole = !warpH && fw === srcW && fh === srcH;
     for (const btn of presetBtns) {
       const k = presetFactor(btn);
-      btn.disabled = k < minFactor() || k > maxFactor() || (whole && k <= 1);
+      btn.disabled = k < reach || k > maxFactor() || (whole && k <= 1);
     }
   }
 
@@ -877,8 +941,13 @@
     wantedFactor = k;
     factor = clamp(k, minFactor(), maxFactor());
     const [fw, fh] = frameSize();
-    const w = Math.max(1, Math.round(fw / factor));
-    const h = Math.max(1, Math.round(fh / factor));
+    let w = Math.max(1, Math.round(fw / factor));
+    let h = Math.max(1, Math.round(fh / factor));
+    // Rounding up can leave a corrected frame at its largest a pixel too big.
+    while (warpH && w > 1 && h > 1 && !cropRoom(w, h).length) {
+      w--;
+      h = Math.max(1, Math.round(w * fh / fw));
+    }
     let x, y;
     if (center) {
       x = (srcW - w) / 2;
@@ -890,21 +959,19 @@
       x = crop.x + crop.w / 2 - w / 2;
       y = crop.y + crop.h / 2 - h / 2;
     }
-    crop = {
-      x: Math.round(clamp(x, 0, srcW - w)),
-      y: Math.round(clamp(y, 0, srcH - h)),
-      w, h,
-    };
+    [x, y] = placeCrop(x, y, w, h);
+    crop = { x, y, w, h };
     syncInputs(skip);
     render();
   }
 
+  // A preset stays lit when a correction has shrunk its frame to fit.
   function syncInputs(skip) {
     const pixels = crop.w * crop.h;
     if (skip !== mpInput) mpInput.value = +(pixels / 1e6).toFixed(2);
     if (skip !== factorInput) factorInput.value = +factor.toFixed(3);
     for (const btn of presetBtns) {
-      btn.classList.toggle('active', !btn.disabled && Math.abs(presetFactor(btn) - factor) < 1e-6);
+      btn.classList.toggle('active', !btn.disabled && Math.abs(presetFactor(btn) - wantedFactor) < 1e-6);
     }
 
     const pct = pixels / (srcW * srcH) * 100;
@@ -931,6 +998,7 @@
   function render() {
     if (!srcW) return;
     const s = displayScale();
+    sourcePreview.style.transform = warpH ? cssMatrix(warpH, s) : '';
     cropRect.style.left = crop.x * s + 'px';
     cropRect.style.top = crop.y * s + 'px';
     cropRect.style.width = crop.w * s + 'px';
@@ -939,8 +1007,7 @@
   }
 
   function moveBy(dx, dy) {
-    crop.x = Math.round(clamp(crop.x + dx, 0, srcW - crop.w));
-    crop.y = Math.round(clamp(crop.y + dy, 0, srcH - crop.h));
+    [crop.x, crop.y] = placeCrop(crop.x + dx, crop.y + dy, crop.w, crop.h);
     render();
   }
 
@@ -954,6 +1021,226 @@
   }
 
   new ResizeObserver(render).observe(sourcePreview);
+
+  // --- Transform --------------------------------------------------------
+  // Vertical and Horizontal re-aim a virtual camera (tilt, then pan) using
+  // the lens's 35 mm-equivalent focal length, then put the photo's centre
+  // back where it was at the scale it had there. Straighten then turns the
+  // result about the centre. Together they make one homography from source
+  // pixels to output pixels. The output keeps the source's size, and the
+  // crop has to stay inside both it and the corrected picture.
+
+  // 3 × 3 matrices are flat row-major arrays.
+  function mul3(a, b) {
+    const m = [];
+    for (let i = 0; i < 9; i += 3) {
+      for (let j = 0; j < 3; j++) m.push(a[i] * b[j] + a[i + 1] * b[3 + j] + a[i + 2] * b[6 + j]);
+    }
+    return m;
+  }
+
+  function det3(m) {
+    return m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) +
+      m[2] * (m[3] * m[7] - m[4] * m[6]);
+  }
+
+  function inv3(m) {
+    const d = det3(m);
+    return [
+      m[4] * m[8] - m[5] * m[7], m[2] * m[7] - m[1] * m[8], m[1] * m[5] - m[2] * m[4],
+      m[5] * m[6] - m[3] * m[8], m[0] * m[8] - m[2] * m[6], m[2] * m[3] - m[0] * m[5],
+      m[3] * m[7] - m[4] * m[6], m[1] * m[6] - m[0] * m[7], m[0] * m[4] - m[1] * m[3],
+    ].map(v => v / d);
+  }
+
+  // Maps (x, y) through m; also returns the homogeneous w, which stays
+  // positive for points in front of the camera.
+  function apply3(m, x, y) {
+    const w = m[6] * x + m[7] * y + m[8];
+    return [(m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w, w];
+  }
+
+  function buildWarp({ roll, tilt, pan }) {
+    if (!roll && !tilt && !pan) return null;
+    const cx = srcW / 2, cy = srcH / 2;
+    let m = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    if (tilt || pan) {
+      const focal35 = (exif && exif.focal35) || DEFAULT_FOCAL35;
+      const f = focal35 / Math.hypot(36, 24) * Math.hypot(srcW, srcH);
+      const a = tilt * Math.PI / 180, b = pan * Math.PI / 180;
+      const turn = mul3(
+        [Math.cos(b), 0, Math.sin(b), 0, 1, 0, -Math.sin(b), 0, Math.cos(b)],
+        [1, 0, 0, 0, Math.cos(a), -Math.sin(a), 0, Math.sin(a), Math.cos(a)]);
+      m = mul3([f, 0, cx, 0, f, cy, 0, 0, 1], mul3(turn, [1 / f, 0, -cx / f, 0, 1 / f, -cy / f, 0, 0, 1]));
+      // The area scale at a point is det / w³.
+      const [px, py, w] = apply3(m, cx, cy);
+      const s = Math.sqrt(w ** 3 / det3(m));
+      m = mul3([s, 0, cx - s * px, 0, s, cy - s * py, 0, 0, 1], m);
+    }
+    if (roll) {
+      const t = roll * Math.PI / 180, c = Math.cos(t), sn = Math.sin(t);
+      m = mul3([c, -sn, cx - c * cx + sn * cy, sn, c, cy - sn * cx - c * cy, 0, 0, 1], m);
+    }
+    return m;
+  }
+
+  // Past a point, tilting sends a corner towards infinity and the picture
+  // stretches without bound, so corrections stop well before that.
+  function warpUsable(m) {
+    const wc = apply3(m, srcW / 2, srcH / 2)[2];
+    return [[0, 0], [srcW, 0], [srcW, srcH], [0, srcH]].every(([x, y]) => apply3(m, x, y)[2] > 0.2 * wc);
+  }
+
+  // Takes on a correction unless it's past that point; returns whether it
+  // did.
+  function applyAdjust(next) {
+    const m = buildWarp(next);
+    if (m && !warpUsable(m)) return false;
+    adjust = next;
+    warpH = m;
+    warpInv = m && inv3(m);
+    planes = cropPlanes();
+    fitCache.clear();
+    return true;
+  }
+
+  // Shows the correction in the inputs, except `skip`, which is being typed in.
+  function syncAdjust(skip) {
+    for (const input of adjustInputs) {
+      if (input !== skip) input.value = adjust[input.dataset.adjust];
+    }
+    adjustResetBtn.disabled = !warpH;
+  }
+
+  function setAdjust(next, skip = null) {
+    const ok = applyAdjust(next);
+    syncAdjust(ok ? skip : null);
+    if (!ok) return;
+    updateFrameControls();
+    setFactor(wantedFactor);
+  }
+
+  // The output frame, and once corrected, the picture's edges moved
+  // EDGE_INSET inwards.
+  function cropPlanes() {
+    const out = [
+      { nx: 1, ny: 0, d: 0 }, { nx: -1, ny: 0, d: -srcW },
+      { nx: 0, ny: 1, d: 0 }, { nx: 0, ny: -1, d: -srcH },
+    ];
+    if (!warpH) return out;
+    const q = [[0, 0], [srcW, 0], [srcW, srcH], [0, srcH]].map(([x, y]) => apply3(warpH, x, y));
+    let area = 0;
+    for (let i = 0; i < 4; i++) {
+      const [x0, y0] = q[i], [x1, y1] = q[(i + 1) % 4];
+      area += x0 * y1 - x1 * y0;
+    }
+    for (let i = 0; i < 4; i++) {
+      const [x0, y0] = q[i], [x1, y1] = q[(i + 1) % 4];
+      const len = Math.hypot(x1 - x0, y1 - y0) * Math.sign(area);
+      const nx = (y0 - y1) / len, ny = (x1 - x0) / len;
+      out.push({ nx, ny, d: nx * x0 + ny * y0 + EDGE_INSET });
+    }
+    return out;
+  }
+
+  // The farthest a w × h crop's corner reaches against half-plane n is
+  // min(0, nx·w) + min(0, ny·h) from its top-left, so each plane bounds the
+  // top-left by n·p ≥ limit.
+  function cropLimit({ nx, ny, d }, w, h) {
+    return d - Math.min(0, nx * w) - Math.min(0, ny * h);
+  }
+
+  // Where a w × h crop's top-left corner may go, as a convex polygon; empty
+  // when the crop fits nowhere.
+  function cropRoom(w, h) {
+    const far = 4 * (srcW + srcH);
+    let poly = [[-far, -far], [far, -far], [far, far], [-far, far]];
+    for (const plane of planes) {
+      const lim = cropLimit(plane, w, h);
+      const next = [];
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i], b = poly[(i + 1) % poly.length];
+        const da = plane.nx * a[0] + plane.ny * a[1] - lim;
+        const db = plane.nx * b[0] + plane.ny * b[1] - lim;
+        if (da >= 0) next.push(a);
+        if ((da >= 0) !== (db >= 0)) {
+          const t = da / (da - db);
+          next.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
+        }
+      }
+      poly = next;
+      if (!poly.length) break;
+    }
+    return poly;
+  }
+
+  const fitCache = new Map();
+
+  // Smallest factor at which an fw × fh frame fits somewhere in the
+  // corrected picture, by bisection.
+  function fitFactor(fw, fh) {
+    const key = fw + ' ' + fh;
+    if (fitCache.has(key)) return fitCache.get(key);
+    const fits = k => cropRoom(fw / k, fh / k).length > 0;
+    let lo = Math.max(fw / srcW, fh / srcH), hi = lo;
+    if (!fits(hi)) {
+      do { lo = hi; hi *= 1.5; } while (!fits(hi));
+      for (let i = 0; i < 40; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) hi = mid; else lo = mid;
+      }
+    }
+    fitCache.set(key, hi);
+    return hi;
+  }
+
+  // The position nearest (x, y) where a w × h crop fits. Uncorrected it
+  // stays on whole pixels, so the export is an exact copy.
+  function placeCrop(x, y, w, h) {
+    if (!warpH) return [Math.round(clamp(x, 0, srcW - w)), Math.round(clamp(y, 0, srcH - h))];
+    const fits = (px, py) => planes.every(p => p.nx * px + p.ny * py >= cropLimit(p, w, h) - 1e-6);
+    const tidy = ([px, py]) => {
+      const rx = Math.round(px), ry = Math.round(py);
+      return fits(rx, ry) ? [rx, ry] : [px, py];
+    };
+    if (fits(x, y)) return tidy([x, y]);
+    const room = cropRoom(w, h);
+    if (!room.length) return [x, y];
+    let best = room[0], bestD = Infinity;
+    for (let i = 0; i < room.length; i++) {
+      const [ax, ay] = room[i], [bx, by] = room[(i + 1) % room.length];
+      const ex = bx - ax, ey = by - ay, len2 = ex * ex + ey * ey;
+      const t = len2 ? clamp(((x - ax) * ex + (y - ay) * ey) / len2, 0, 1) : 0;
+      const px = ax + t * ex, py = ay + t * ey;
+      const dist = (px - x) ** 2 + (py - y) ** 2;
+      if (dist < bestD) { bestD = dist; best = [px, py]; }
+    }
+    return tidy(best);
+  }
+
+  // Width of the largest crop, width/height `ratio`, that grows from corner
+  // (ax, ay) in direction (sx, sy) and still fits.
+  function anchoredMaxWidth(ax, ay, sx, sy, ratio) {
+    let best = Infinity;
+    const corners = [[sx, 0], [0, sy / ratio], [sx, sy / ratio]];
+    for (const { nx, ny, d } of planes) {
+      const slack = nx * ax + ny * ay - d;
+      for (const [ux, uy] of corners) {
+        const rate = nx * ux + ny * uy;
+        if (rate < 0) best = Math.min(best, slack / -rate);
+      }
+    }
+    return Math.max(0, best);
+  }
+
+  // The homography in display pixels (scale s) as a CSS transform. Only
+  // perspective needs matrix3d (column-major), which puts the image on a 3D
+  // layer; straightening alone stays a 2D matrix.
+  function cssMatrix(m, s) {
+    if (!m[6] && !m[7]) return `matrix(${[m[0], m[3], m[1], m[4], m[2] * s, m[5] * s].join(',')})`;
+    const v = [m[0], m[3], 0, m[6] / s, m[1], m[4], 0, m[7] / s, 0, 0, 1, 0, m[2] * s, m[5] * s, 0, m[8]];
+    return `matrix3d(${v.join(',')})`;
+  }
 
   // --- Guides -----------------------------------------------------------
   // Composition overlays, drawn in crop pixels into an SVG stretched over
@@ -1030,6 +1317,21 @@
       case 'center':
         cross([w / 2], [h / 2]);
         break;
+      case 'grid': {
+        // Square cells, eight across the short side, laid out from the
+        // centre.
+        const cell = Math.min(w, h) / 8;
+        const steps = len => {
+          const n = Math.floor(len / 2 / cell), at = [];
+          for (let i = -n; i <= n; i++) {
+            const v = len / 2 + i * cell;
+            if (v > 0.5 && v < len - 0.5) at.push(v);
+          }
+          return at;
+        };
+        cross(steps(w), steps(h));
+        break;
+      }
       case 'diagonals': {
         // 45° from each corner until they meet the far side.
         const s = Math.min(w, h);
@@ -1068,10 +1370,11 @@
   }
 
   function renderGuides() {
-    const key = [guide, guideTurn, crop.w, crop.h].join();
+    const kind = adjusting ? 'grid' : guide;
+    const key = [kind, guideTurn, crop.w, crop.h].join();
     if (key === guidesKey) return;
     guidesKey = key;
-    const { major, minor } = guideLines(guide, crop.w, crop.h, guideTurn);
+    const { major, minor } = guideLines(kind, crop.w, crop.h, guideTurn);
     const toPath = lines => lines.map(l => 'M' + l.map(v => +v.toFixed(1)).join(' ')).join('');
     const layers = [['minor', toPath(minor)], ['major', toPath(major)]].filter(([, d]) => d);
     const paths = [];
@@ -1132,9 +1435,7 @@
         x: west ? start.x + start.w : start.x,
         y: north ? start.y + start.h : start.y,
       };
-      const availW = west ? anchor.x : srcW - anchor.x;
-      const availH = north ? anchor.y : srcH - anchor.y;
-      maxW = Math.min(availW, availH * ratio);
+      maxW = anchoredMaxWidth(anchor.x, anchor.y, sx, sy, ratio);
     }
 
     function onMove(ev) {
@@ -1192,6 +1493,79 @@
     return 'image/jpeg';
   }
 
+  // Fills output rows v0…v1−1 of a w-wide crop at (ox, oy), sampling the
+  // source bilinearly through `inv` at each pixel's centre. `src` is an
+  // sw × sh RGBA window of the source whose top-left is (sx0, sy0); samples
+  // past its edges take the nearest edge pixel. With `flatten`, pixels go
+  // onto white, opaque, for JPEG.
+  function warpRows(src, sw, sh, sx0, sy0, inv, ox, oy, w, v0, v1, out, flatten) {
+    const maxX = sw - 1, maxY = sh - 1;
+    for (let v = v0; v < v1; v++) {
+      const X = ox + 0.5, Y = oy + v + 0.5;
+      // Along a row the homogeneous coordinates change linearly.
+      let px = inv[0] * X + inv[1] * Y + inv[2];
+      let py = inv[3] * X + inv[4] * Y + inv[5];
+      let pw = inv[6] * X + inv[7] * Y + inv[8];
+      let o = v * w * 4;
+      for (let u = 0; u < w; u++) {
+        const fx = px / pw - sx0 - 0.5, fy = py / pw - sy0 - 0.5;
+        let x0 = Math.floor(fx), y0 = Math.floor(fy);
+        const ax = fx - x0, ay = fy - y0;
+        let x1 = x0 + 1, y1 = y0 + 1;
+        x0 = x0 < 0 ? 0 : x0 > maxX ? maxX : x0;
+        x1 = x1 < 0 ? 0 : x1 > maxX ? maxX : x1;
+        y0 = y0 < 0 ? 0 : y0 > maxY ? maxY : y0;
+        y1 = y1 < 0 ? 0 : y1 > maxY ? maxY : y1;
+        const i00 = (y0 * sw + x0) * 4, i10 = (y0 * sw + x1) * 4;
+        const i01 = (y1 * sw + x0) * 4, i11 = (y1 * sw + x1) * 4;
+        const w00 = (1 - ax) * (1 - ay), w10 = ax * (1 - ay), w01 = (1 - ax) * ay, w11 = ax * ay;
+        const alpha = src[i00 + 3] * w00 + src[i10 + 3] * w10 + src[i01 + 3] * w01 + src[i11 + 3] * w11;
+        for (let c = 0; c < 3; c++) {
+          const val = src[i00 + c] * w00 + src[i10 + c] * w10 + src[i01 + c] * w01 + src[i11 + c] * w11;
+          out[o + c] = flatten ? val * alpha / 255 + 255 - alpha : val;
+        }
+        out[o + 3] = flatten ? 255 : alpha;
+        o += 4;
+        px += inv[0];
+        py += inv[3];
+        pw += inv[6];
+      }
+    }
+  }
+
+  // Draws the crop {x, y, w, h} through the inverse homography `inv`, which
+  // a 2D canvas can't do itself, a band of rows at a time so the page stays
+  // responsive.
+  async function warpInto(ctx, { x: ox, y: oy, w, h }, inv, flatten) {
+    const back = [[ox, oy], [ox + w, oy], [ox + w, oy + h], [ox, oy + h]].map(([x, y]) => apply3(inv, x, y));
+    const xs = back.map(p => p[0]), ys = back.map(p => p[1]);
+    // The source pixels under the crop, plus a margin for interpolation.
+    const sx0 = Math.max(0, Math.floor(Math.min(...xs)) - 2);
+    const sy0 = Math.max(0, Math.floor(Math.min(...ys)) - 2);
+    const sw = Math.min(srcW, Math.ceil(Math.max(...xs)) + 2) - sx0;
+    const sh = Math.min(srcH, Math.ceil(Math.max(...ys)) + 2) - sy0;
+    const region = document.createElement('canvas');
+    region.width = sw;
+    region.height = sh;
+    const rctx = region.getContext('2d', { willReadFrequently: true });
+    rctx.drawImage(sourceImg, sx0, sy0, sw, sh, 0, 0, sw, sh);
+    const src = rctx.getImageData(0, 0, sw, sh).data;
+    region.width = region.height = 0;
+
+    const out = ctx.createImageData(w, h);
+    for (let v = 0; v < h;) {
+      const t0 = performance.now();
+      while (v < h && performance.now() - t0 < 40) {
+        const end = Math.min(h, v + 16);
+        warpRows(src, sw, sh, sx0, sy0, inv, ox, oy, w, v, end, out.data, flatten);
+        v = end;
+      }
+      setStatus('busy', `<span class="spinner"></span>Correcting perspective… ${Math.round(v / h * 100)}%`);
+      await new Promise(r => setTimeout(r, 0));
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+
   function encode(canvas, mime, quality) {
     return new Promise((resolve, reject) => {
       canvas.toBlob(blob => {
@@ -1211,28 +1585,43 @@
     await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
 
     try {
+      // The page stays live through a perspective export, so everything the
+      // file depends on is taken now.
       const { x, y, w, h } = crop;
+      const meta = exif, name = sourceFile.name, ratioTag = ratioLabel('x');
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
-      if (mime === 'image/jpeg') {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
+      const jpeg = mime === 'image/jpeg';
+      if (warpH && (warpH[6] || warpH[7])) {
+        await warpInto(ctx, { x, y, w, h }, warpInv, jpeg);
+        setStatus('busy', '<span class="spinner"></span>Encoding…');
+      } else {
+        if (jpeg) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+        }
+        if (warpH) {
+          // Straightening alone is affine, which the canvas resamples itself.
+          ctx.imageSmoothingQuality = 'high';
+          ctx.setTransform(warpH[0], warpH[3], warpH[1], warpH[4], warpH[2] - x, warpH[5] - y);
+          ctx.drawImage(sourceImg, 0, 0);
+        } else {
+          ctx.drawImage(sourceImg, x, y, w, h, 0, 0, w, h);
+        }
       }
-      ctx.drawImage(sourceImg, x, y, w, h, 0, 0, w, h);
       let blob = await encode(canvas, mime, mime === 'image/png' ? undefined : q);
       if (mime !== blob.type) throw new Error(`this browser can't encode ${mime.replace('image/', '').toUpperCase()}`);
 
-      if (mime === 'image/jpeg' && exif && keepExifInput.checked) {
+      if (jpeg && meta && keepExifInput.checked) {
         const bytes = new Uint8Array(await blob.arrayBuffer());
-        blob = new Blob([insertExif(bytes, patchedExif(exif, w, h))], { type: mime });
+        blob = new Blob([insertExif(bytes, patchedExif(meta, w, h))], { type: mime });
       }
 
-      const base = sourceFile.name.replace(/\.[^.]+$/, '') || 'image';
+      const base = name.replace(/\.[^.]+$/, '') || 'image';
       const mp = w * h / 1e6;
       const mpTag = String(+mp.toFixed(mp < 1 ? 2 : 1));
-      const ratioTag = ratioLabel('x');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1316,6 +1705,35 @@
     if (btn) setGuide(btn.dataset.guide);
   });
   guideTurnBtn.addEventListener('click', turnGuide);
+
+  adjustGrid.addEventListener('input', e => {
+    const input = e.target;
+    const v = parseFloat(input.value);
+    if (!input.dataset.adjust || !Number.isFinite(v)) return;
+    const lim = parseFloat(input.getAttribute('max'));
+    setAdjust({ ...adjust, [input.dataset.adjust]: clamp(v, -lim, lim) }, input);
+  });
+  // Show the value actually used once the user leaves a field.
+  adjustGrid.addEventListener('change', () => syncAdjust(null));
+  // Double-clicking a slider zeroes it.
+  adjustGrid.addEventListener('dblclick', e => {
+    if (e.target.type === 'range') setAdjust({ ...adjust, [e.target.dataset.adjust]: 0 });
+  });
+  // While a slider is dragged the grid stands in for the guide.
+  adjustGrid.addEventListener('pointerdown', e => {
+    if (e.target.type !== 'range') return;
+    adjusting = true;
+    renderGuides();
+    const done = () => {
+      adjusting = false;
+      renderGuides();
+      window.removeEventListener('pointerup', done);
+      window.removeEventListener('pointercancel', done);
+    };
+    window.addEventListener('pointerup', done);
+    window.addEventListener('pointercancel', done);
+  });
+  adjustResetBtn.addEventListener('click', () => setAdjust(NO_ADJUST));
 
   downloadBtn.addEventListener('click', download);
   centerBtn.addEventListener('click', () => setFactor(wantedFactor, { center: true }));
